@@ -1,0 +1,15 @@
+# .dockerignore
+__pycache__
+*.pyc
+*.pyo  
+*.pyd  
+.Python
+.venv  
+env  
+.ENV  
+.env   
+.git  
+.gitignore  
+alembic/versions/*.pyc
+tmp_uploads
+data/outputs  

@@ -1,0 +1,25 @@
+FROM python:3.11-slim 
+
+# 빌드/런타임에 필요한 최소 OS 패키지 ##
+# - build-essential: 일부 패키지 빌드 대비(향후 vectordb/확장 대비) ##
+# - libpq-dev: psycopg2 계열(Postgres) 의존성 대비 ##
+RUN apt-get update && apt-get install -y \ 
+    build-essential \ 
+    libpq-dev \ 
+    && rm -rf /var/lib/apt/lists/* 
+
+WORKDIR /app
+
+COPY requirements.txt . 
+RUN pip install --no-cache-dir --upgrade pip ## 
+RUN pip install --no-cache-dir -r requirements.txt ##
+
+COPY . . 
+
+ENV PYTHONPATH=/app
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1 
+EXPOSE 8001
+
+# ESG 서비스는 8001 포트로 실행 ##
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"] ##
