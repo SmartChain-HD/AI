@@ -1,6 +1,6 @@
 set -e
 
-BASE="http://127.0.0.1:8000"
+BASE="http://127.0.0.1:8001"
 DRAFT="test_draft_001"
 
 echo "[1] run: 2025 only"

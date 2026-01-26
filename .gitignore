@@ -1,2 +1,21 @@
 .env
 .DS_Store
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Env
+.venv/
+.env
+.env.*
+
+# Upload / outputs (테스트 산출물)
+tmp_uploads/
+data/outputs/
+data/*.db
+
+# OS
+.DS_Store
