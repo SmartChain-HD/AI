@@ -5,14 +5,13 @@ python-multipart==0.0.6
 pydantic==2.5.0
 
 # Computer Vision
-numpy==1.26.4  
+numpy==1.26.4
 opencv-python==4.8.1.78
-ultralytics==8.4.7 
+ultralytics==8.4.7
 
-# Deep Learning - CPU 버전 (가볍고 빠름)
---index-url https://download.pytorch.org/whl/cpu
-torch==2.5.1
-torchvision==0.20.1
+# PyTorch는 이미 설치했으므로 주석 처리
+# torch==2.5.1
+# torchvision==0.20.1
 
 # Speech Recognition and Audio Processing
 transformers==4.35.2

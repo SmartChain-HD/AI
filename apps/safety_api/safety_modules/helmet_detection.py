@@ -15,6 +15,27 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def convert_numpy_types(obj):
+    """
+    NumPy 타입을 Python 기본 타입으로 변환
+    JSON 직렬화를 위해 필수
+    """
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {k: convert_numpy_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    else:
+        return obj
+
+
 class HelmetDetector:
     """
     Detects safety helmets and classifies whether persons are wearing them.
@@ -158,8 +179,8 @@ class HelmetDetector:
 
                         detection = {
                             'bbox': [float(x1), float(y1), float(x2), float(y2)],
-                            'confidence': confidence,
-                            'class_id': class_id,
+                            'confidence': float(confidence),
+                            'class_id': int(class_id),
                             'class_name': self.class_names.get(class_id, 'unknown')
                         }
 
@@ -194,11 +215,11 @@ class HelmetDetector:
                         
                         detection = {
                             'bbox': [float(x1), float(y1), float(x2), float(y2)],
-                            'confidence': helmet_conf if has_helmet else person_conf,
-                            'class_id': 0 if has_helmet else 1,
-                            'class_name': 'helmet' if has_helmet else 'no-helmet',
-                            'person_confidence': person_conf,
-                            'helmet_confidence': helmet_conf
+                            'confidence': float(helmet_conf if has_helmet else person_conf),
+                            'class_id': int(0 if has_helmet else 1),
+                            'class_name': str('helmet' if has_helmet else 'no-helmet'),
+                            'person_confidence': float(person_conf),
+                            'helmet_confidence': float(helmet_conf)
                         }
                         
                         if has_helmet:
@@ -212,7 +233,7 @@ class HelmetDetector:
         total_persons = len(helmets) + len(no_helmets)
         compliance_rate = (len(helmets) / total_persons * 100) if total_persons > 0 else 0
 
-        return {
+        result = {
             'helmets': helmets,
             'no_helmets': no_helmets,
             'helmet_count': len(helmets),
@@ -221,6 +242,9 @@ class HelmetDetector:
             'helmet_compliance_rate': compliance_rate,
             'detection_method': 'custom_model' if self.use_custom_model else 'color_based'
         }
+        
+        # ✅ NumPy 타입을 Python 기본 타입으로 변환
+        return convert_numpy_types(result)
 
     def check_compliance(self, image: np.ndarray, required_rate: float = 100.0) -> bool:
         """
@@ -279,10 +303,10 @@ class HelmetDetector:
 
                     if compliance_rate < required_compliance:
                         violations.append({
-                            'frame_number': frame_count,
-                            'compliance_rate': compliance_rate,
-                            'helmet_count': result['helmet_count'],
-                            'no_helmet_count': result['no_helmet_count']
+                            'frame_number': int(frame_count),
+                            'compliance_rate': float(compliance_rate),
+                            'helmet_count': int(result['helmet_count']),
+                            'no_helmet_count': int(result['no_helmet_count'])
                         })
 
                     logger.debug(f"Frame {frame_count}: {compliance_rate:.1f}% compliance")
@@ -293,31 +317,35 @@ class HelmetDetector:
             cap.release()
 
         if not compliance_per_frame:
-            return {
-                'total_frames': frame_count,
+            result = {
+                'total_frames': int(frame_count),
                 'sampled_frames': 0,
                 'compliance_per_frame': [],
-                'average_compliance': 0,
-                'min_compliance': 0,
-                'max_compliance': 0,
+                'average_compliance': 0.0,
+                'min_compliance': 0.0,
+                'max_compliance': 0.0,
                 'overall_pass': False,
                 'violations': [],
                 'detection_method': 'custom_model' if self.use_custom_model else 'color_based'
             }
+            return convert_numpy_types(result)
 
         average_compliance = np.mean(compliance_per_frame)
 
-        return {
-            'total_frames': frame_count,
-            'sampled_frames': len(compliance_per_frame),
-            'compliance_per_frame': compliance_per_frame,
-            'average_compliance': average_compliance,
-            'min_compliance': min(compliance_per_frame),
-            'max_compliance': max(compliance_per_frame),
-            'overall_pass': average_compliance >= required_compliance,
+        result = {
+            'total_frames': int(frame_count),
+            'sampled_frames': int(len(compliance_per_frame)),
+            'compliance_per_frame': [float(x) for x in compliance_per_frame],
+            'average_compliance': float(average_compliance),
+            'min_compliance': float(min(compliance_per_frame)),
+            'max_compliance': float(max(compliance_per_frame)),
+            'overall_pass': bool(average_compliance >= required_compliance),
             'violations': violations,
             'detection_method': 'custom_model' if self.use_custom_model else 'color_based'
         }
+        
+        # ✅ NumPy 타입을 Python 기본 타입으로 변환
+        return convert_numpy_types(result)
 
     def draw_detections(self, image: np.ndarray, detections: Dict) -> np.ndarray:
         """
