@@ -2,6 +2,8 @@
 TBM Safety Management System API
 FastAPI application for analyzing TBM videos for safety compliance
 """
+import os
+os.environ['TORCH_FORCE_WEIGHTS_ONLY_LOAD'] = '0'
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from pydantic import BaseModel, Field
@@ -12,8 +14,10 @@ from pathlib import Path
 import logging
 import sys
 
+
 # Add parent directory to path to import safety_modules
 sys.path.append(str(Path(__file__).parent.parent))
+
 
 from safety_modules.person_detection import PersonDetector
 from safety_modules.helmet_detection import HelmetDetector
@@ -73,13 +77,17 @@ async def startup_event():
         logger.info("Person detector initialized")
 
         # Initialize helmet detector (requires custom trained model)
-        helmet_model_path = Path(__file__).parent.parent / "models" / "helmet_model.pt"
-        if helmet_model_path.exists():
-            helmet_detector = HelmetDetector(model_path=str(helmet_model_path), confidence_threshold=0.5)
-            logger.info("Helmet detector initialized")
+        helmet_model_path = "models/helmet_model.pt"
+        if not Path(helmet_model_path).exists():
+            helmet_model_path = None  # None이면 기본 YOLO + 색상 감지 사용
+        
+        helmet_detector = HelmetDetector(model_path=helmet_model_path, confidence_threshold=0.5)
+        
+        if helmet_model_path:
+            logger.info("✅ Helmet detector initialized with custom model")
         else:
-            logger.warning(f"Helmet model not found at {helmet_model_path}. Helmet detection will not be available.")
-            helmet_detector = None
+            logger.info("✅ Helmet detector initialized with color-based detection (temporary)")
+        
 
         # Initialize speech analyzer
         speech_analyzer = SpeechAnalyzer()

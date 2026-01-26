@@ -5,10 +5,14 @@ python-multipart==0.0.6
 pydantic==2.5.0
 
 # Computer Vision
+numpy==1.26.4  
 opencv-python==4.8.1.78
-ultralytics==8.0.228
-torch>=2.0.0
-torchvision>=0.15.0
+ultralytics==8.4.7 
+
+# Deep Learning - CPU 버전 (가볍고 빠름)
+--index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1
+torchvision==0.20.1
 
 # Speech Recognition and Audio Processing
 transformers==4.35.2
@@ -17,7 +21,6 @@ soundfile==0.12.1
 moviepy==1.0.3
 
 # Utilities
-numpy>=1.24.0
 Pillow>=10.0.0
 
 # Testing
@@ -25,6 +28,6 @@ pytest==7.4.3
 pytest-asyncio==0.21.1
 httpx==0.25.2
 
-# Optional: for GPU support
-# Install separately if needed:
+# Note: GPU 버전이 필요한 경우:
+# torch, torchvision 라인을 삭제하고
 # pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
