@@ -16,6 +16,22 @@
 | **AI Developer** | **배수한** | [![uh004's GitHub](https://img.shields.io/badge/uh004-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/uh004) | 컴플라이언스 |
 
 ---
+## 🛠 기술 스택 및 도구 (Tech Stack & Tools)
+Language: Python 3.10
+Framework: FastAPI
+
+AI Pair-Programmer: Anthropic Claude 3.5 Sonnet (코드 구조 제안 및 유닛 테스트 생성 보조)
+
+🤖 AI Collaboration Statement (AI 협업 선언)
+이 프로젝트는 개발 생산성 향상을 위해 AI와 협업하여 제작되었습니다.
+AI 기여 영역: 초기 API 스켈레톤 생성, 반복적인 데이터 파싱 로직 구현.
+팀원의 기여 영역: 데이터베이스 스키마 설계, 보안 인증(JWT) 로직 구현, AI 생성 코드의 오류 수정 및 성능 튜닝.
+검증 과정: 모든 AI 생성 코드는 직접 한 줄씩 검토(Line-by-line review)하였으며, 프로젝트의 컨벤션에 맞게 리팩토링되었습니다.
+
+📈 학습 및 성장 포인트 (Key Learnings)
+AI가 제안한 Async/Await 패턴의 원리를 분석하며 비동기 프로그래밍의 깊은 이해를 얻음.
+AI의 할루시네이션(잘못된 라이브러리 추천)을 직접 해결하며 공식 문서(Documentation)를 교차 검증하는 습관을 형성함.
+
 
 ## 🛠 AI 시스템 아키텍처 및 파이프라인
 
