@@ -12,6 +12,9 @@ ESG 도메인 — rules 메타(헤더 기대치/사유코드)
 
 from __future__ import annotations
 
+import re
+from datetime import date
+from typing import Any
 
 # -------------------------------------------------------
 # XLSX 최소 헤더 기대치(너무 엄격하면 실데이터에서 다 깨짐)
