@@ -20,7 +20,7 @@ EXPECTED_HEADERS: dict[str, list[str]] = {
     "safety.fire.inspection": ["월", "점검항목", "수량", "결과", "조치내용", "조치기한", "증빙사진ID"],
 
     # 20251126_성광벤드_위험성평가서.xlsx 기준
-    "safety.risk.assessment": ["순번", "작업명(Activity)", "유해위험요인", "감소대책(Action)", "담당자", "점검일", "판정", "테스트 목적"],
+    "safety.risk.assessment": ["순번", "작업명(Activity)", "유해위험요인", "감소대책(Action)", "담당자", "점검일"],
 
     "safety.checklist": ["점검항목", "결과", "날짜"],
 }
@@ -34,7 +34,6 @@ REASON_CODES: dict[str, str] = {
     "MISSING_SLOT":       "필수 슬롯 누락",
     "HEADER_MISMATCH":    "필수 헤더 누락",
     "EMPTY_TABLE":        "표/데이터 행이 비어있음",
-    "NO_DATE_FOUND":      "날짜 미발견",
     "DATE_MISMATCH":      "점검/교육/작성일이 제출 기간 밖",
     "SIGNATURE_MISSING":  "확인 서명란 미기재",
     "OCR_FAILED":         "OCR 판독 불가",
@@ -63,4 +62,9 @@ REASON_CODES: dict[str, str] = {
     # ── 소방 점검 (safety.fire.inspection) ──
     "FIRE_ALL_GOOD_PATTERN":  "항목이 항상 '양호'로만 반복 (형식 제출 의심)",
     "FIRE_COPYPASTE_PATTERN": "총평/체크패턴이 반복 (복붙 의심)",
+
+    # ── 교차 검증 (출석부 vs 교육사진) ──
+    "CROSS_HEADCOUNT_MISMATCH":       "출석부 인원수와 교육사진 인원수 불일치",
+    "CROSS_ATTENDANCE_PARSE_FAILED":  "출석부에서 인원수 추출 실패",
+    "CROSS_PHOTO_COUNT_FAILED":       "교육사진에서 인원수 감지 실패",
 }
