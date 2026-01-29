@@ -1,4 +1,7 @@
-"""Submit 파이프라인 — 6단계 (기획서 §4.2).
+# app/pipeline/submit.py
+
+"""
+Submit 파이프라인 — 6단계 (기획서 §4.2).
 
 (1) TRIAGE — 파일 분류 + 열 수 있는지 체크
 (2) SLOT APPLY — slot_hint 적용
@@ -26,6 +29,7 @@ from app.llm.prompts import (
     IMAGE_VISION_USER,
     JUDGE_FINAL,
     PDF_ANALYSIS,
+    get_prompt,
 )
 from app.pipeline.triage import triage_files
 from app.schemas.run import (
@@ -75,7 +79,7 @@ async def _extract_and_analyse(
         # LLM 보강 (GPT-4o-mini)
         extras: dict[str, str] = {}
         try:
-            raw = await ask_llm(PDF_ANALYSIS, extracted["text"][:4000], heavy=False)
+            raw = await ask_llm(get_prompt(PDF_ANALYSIS, domain), extracted["text"][:4000], heavy=False)
             llm = json.loads(raw)
             for d in llm.get("dates", []):
                 if d not in extracted["dates"]:
@@ -95,13 +99,11 @@ async def _extract_and_analyse(
         # GPT-4o Vision 보강
         extras = {}
         try:
-            raw = await ask_llm_vision(IMAGE_VISION, IMAGE_VISION_USER, data, fmt)
+            raw = await ask_llm_vision(get_prompt(IMAGE_VISION, domain), get_prompt(IMAGE_VISION_USER, domain), data, fmt)
             vision = json.loads(raw)
             for d in vision.get("dates", []):
                 if d not in extracted["dates"]:
                     extracted["dates"].append(d)
-            if vision.get("violations"):
-                extracted["reasons"].extend(["VIOLATION_DETECTED"] * 0)  # log only
             if vision.get("scene_description"):
                 extras["scene_description"] = vision["scene_description"]
             extras.update({k: str(v) for k, v in vision.get("extras", {}).items()})
@@ -117,7 +119,7 @@ async def _extract_and_analyse(
         # LLM 보강 (GPT-4o-mini)
         extras = {}
         try:
-            raw = await ask_llm(DATA_ANALYSIS, extracted["df_preview"], heavy=False)
+            raw = await ask_llm(get_prompt(DATA_ANALYSIS, domain), extracted["df_preview"], heavy=False)
             llm = json.loads(raw)
             for d in llm.get("dates", []):
                 if d not in extracted["dates"]:
@@ -128,14 +130,24 @@ async def _extract_and_analyse(
         result.update(extracted)
         result["extras"] = extras
 
+    # ── 도메인 화이트리스트 필터링 (해당 도메인에 정의된 reason만 유지) ──
+    rules_mod = get_rules_module(domain)
+    allowed_reasons = set(getattr(rules_mod, "REASON_CODES", {}).keys())
+    if allowed_reasons and "reasons" in result:
+        result["reasons"] = [r for r in result["reasons"] if r in allowed_reasons]
+
     # ── 슬롯별 세부 검증 (도메인 validators) ──
     validator = _get_slot_validator(domain)
     if validator is not None:
-        extra_reasons = validator.validate_slot(slot_name, file_type, result)
-        for r in extra_reasons:
-            if r not in result.get("reasons", []):
-                result.setdefault("reasons", []).append(r)
-
+        try:
+            extra_reasons = validator.validate_slot(slot_name, file_type, result) or []
+            if extra_reasons:
+                result.setdefault("reasons", [])
+                for r in extra_reasons:
+                    if r not in result["reasons"]:
+                        result["reasons"].append(r)
+        except Exception:
+            pass       
     return result
 
 
@@ -215,6 +227,7 @@ async def _generate_clarifications(
 # ── (6) FINAL AGGREGATE ───────────────────────────────
 async def _final_aggregate(
     package_id: str,
+    domain: str,
     slot_results: list[SlotResult],
     missing_slots: list[str],
     clarifications: list[Clarification],
@@ -249,7 +262,7 @@ async def _final_aggregate(
     judge_input = "\n".join(summary_lines)
 
     try:
-        raw = await ask_llm(JUDGE_FINAL, judge_input, heavy=True)
+        raw = await ask_llm(get_prompt(JUDGE_FINAL, domain), judge_input, heavy=True)
         llm_result = json.loads(raw)
         why = llm_result.get("why", "")
         risk_level = llm_result.get("risk_level", risk_level)
@@ -307,12 +320,32 @@ async def run_submit(req: SubmitRequest) -> SubmitResponse:
     provided = {h.slot_name for h in req.slot_hint}
     missing = [s for s in required if s not in provided]
 
+    # (4.5) 도메인별 교차 검증 (슬롯 간 비교)
+    cross_validator = _get_slot_validator(req.domain)
+    if cross_validator is not None and hasattr(cross_validator, "esg_cross_checks"):
+        try:
+            cross_results = cross_validator.esg_cross_checks(
+                dict(slot_groups), req.period_start, req.period_end,
+            )
+            for cr in cross_results:
+                slot_results.append(SlotResult(
+                    slot_name=cr["slot_name"],
+                    verdict=cr.get("verdict", "NEED_FIX"),
+                    reasons=cr.get("reasons", []),
+                    file_ids=[],
+                    file_names=[],
+                    extras=cr.get("extras", {}),
+                ))
+        except Exception:
+            pass
+
     # (5) CLARIFY
     clarifications = await _generate_clarifications(slot_results)
 
     # (6) FINAL AGGREGATE
     return await _final_aggregate(
         package_id=req.package_id,
+        domain=req.domain,
         slot_results=slot_results,
         missing_slots=missing,
         clarifications=clarifications,
