@@ -1,7 +1,12 @@
-# 🤖 AI 기반 스마트 진단 및 자동 리포팅 시스템
+# AI 기반 협력사 자료 자동 검증 시스템
 
-본 프로젝트는 OCR 기술과 대형 언어 모델(LLM)을 결합하여 데이터 유효성 검증부터 지표화, 
-<br>그리고 최종 리포트 생성까지 수행하는 통합 AI 솔루션입니다.
+**협력사가 제출하는 안전/컴플라이언스/ESG 문서(PDF, XLSX, 이미지)를 자동으로 분류하고,
+규칙 기반 검증 + LLM 분석을 결합하여 verdict(판정) 및 risk level(위험도)을 산출하는 Stateless FastAPI 시스템입니다.**
+
+---
+
+본 프로젝트는 초기 기획 단계에서 생성형 AI(Claude)를 활용해 개념적 구조와 로직 정리의 초안을 참고했으며,
+실제 판단 기준의 구체화, 알고리즘 설계, FastAPI 구현 및 운영 로직은 모두 팀 내부에서 직접 설계·개발했습니다.
 
 ---
 
@@ -16,47 +21,191 @@
 | **AI Developer** | **배수한** | [![uh004's GitHub](https://img.shields.io/badge/uh004-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/uh004) | 컴플라이언스 |
 
 ---
-## 🛠 기술 스택 및 도구 (Tech Stack & Tools)
-Language: Python 3.10
-Framework: FastAPI
 
-AI Pair-Programmer: Anthropic Claude 3.5 Sonnet (코드 구조 제안 및 유닛 테스트 생성 보조)
+## 💻 Tech Stack
 
-🤖 AI Collaboration Statement (AI 협업 선언)
-이 프로젝트는 개발 생산성 향상을 위해 AI와 협업하여 제작되었습니다.
-AI 기여 영역: 초기 API 스켈레톤 생성, 반복적인 데이터 파싱 로직 구현.
-팀원의 기여 영역: 데이터베이스 스키마 설계, 보안 인증(JWT) 로직 구현, AI 생성 코드의 오류 수정 및 성능 튜닝.
-검증 과정: 모든 AI 생성 코드는 직접 한 줄씩 검토(Line-by-line review)하였으며, 프로젝트의 컨벤션에 맞게 리팩토링되었습니다.
+![Python](https://img.shields.io/badge/Python-3.10-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
+![OpenAI](https://img.shields.io/badge/OpenAI_GPT--4o-412991?style=for-the-badge&logo=openai&logoColor=white)
+![Git](https://img.shields.io/badge/Git-F05032?style=for-the-badge&logo=git&logoColor=white)
 
-📈 학습 및 성장 포인트 (Key Learnings)
-AI가 제안한 Async/Await 패턴의 원리를 분석하며 비동기 프로그래밍의 깊은 이해를 얻음.
-AI의 할루시네이션(잘못된 라이브러리 추천)을 직접 해결하며 공식 문서(Documentation)를 교차 검증하는 습관을 형성함.
-
-
-## 🛠 AI 시스템 아키텍처 및 파이프라인
-
-전체 프로세스는 3개의 핵심 FastAPI 서버를 통해 유기적으로 동작합니다.
-
-### 1️⃣ Data Acquisition & Preprocessing (OCR / Parsing)
-* **OCR 연동**: Naver Clova OCR을 통한 이미지 텍스트 추출 (배수한)
-* **데이터 파싱**: 자료 Parsing 및 추출된 데이터의 구조화 및 전처리 (이수빈, 이종헌)
-
-### 2️⃣ Validation & Metric Calculation (FastAPI #1)
-* **유효성 검증**:
-  * **정형 데이터**: 통계적 수치 기반 검증 로직 (이종헌)
-  * **비정형 데이터**: 논리성 검증 (배수한)
-* **지표화 (AI)**: 검증된 데이터를 바탕으로 정량적 핵심 지표 산출 (이수빈)
-
-### 3️⃣ Automated Reporting (FastAPI #2)
-* **진단표 생성 (AI)**: 항목별 위험 점수 및 진단 결과 도출 (배수한)
-* **보고서 생성 (AI)**: 고위험군 분석 및 대응 가이드라인 자동 기술 (이종헌)
-
-### 4️⃣ Field Inspection Optimization (FastAPI #3)
-* **현장 실사 체크리스트 (AI)**: 지능형 현장 실사 체크리스트 생성 및 사후 검토 (이수빈)
+| 구분 | 기술 |
+|------|------|
+| Framework | FastAPI + Uvicorn |
+| LLM | OpenAI GPT-4o-mini (텍스트/데이터), GPT-4o (Vision/최종판정) |
+| OCR | Naver Clova OCR |
+| 파싱 | PyMuPDF (PDF), pandas + openpyxl (XLSX/CSV) |
+| HTTP | httpx (비동기 다운로드/OCR 호출) |
+| 검증 | Pydantic v2 스키마 |
 
 ---
 
-## 💻 Tech Stack
-![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
-![Git](https://img.shields.io/badge/Git-F05032?style=for-the-badge&logo=git&logoColor=white)
+## 🏗 시스템 아키텍처
+
+```
+Client (프론트엔드)
+  │
+  ├─ POST /run/preview   ← 파일 분류 + 슬롯 추정
+  ├─ POST /run/submit    ← 6단계 파이프라인 실행
+  └─ GET  /health        ← 헬스체크
+```
+
+### Apps 구조
+
+```
+apps/
+├── ai_run_api/     ← 핵심 검증 엔진 (본 문서 대상)
+├── chatboot_api/   ← 챗봇 API
+├── out_risk_api/   ← 외부 리스크 분석 API
+├── report_api/     ← 리포트 생성 API
+└── safety_api/     ← (예정)
+```
+
+---
+
+## 📂 ai_run_api 디렉토리 구조
+
+```
+app/
+├── main.py                        # FastAPI 진입점 + /health
+├── api/
+│   └── run.py                     # POST /run/preview, /run/submit 라우터
+├── schemas/
+│   └── run.py                     # Pydantic 스키마 (Verdict, RiskLevel, SlotResult 등)
+├── pipeline/
+│   ├── preview.py                 # Preview 파이프라인 (슬롯 추정)
+│   ├── triage.py                  # Phase 1: 파일 분류 (확장자/패턴 매칭)
+│   └── submit.py                  # Phase 1~6 Submit 파이프라인
+├── engines/
+│   ├── registry.py                # 도메인 디스패치 (safety/compliance/esg)
+│   ├── safety/
+│   │   ├── slots.py               # 슬롯 정의 (필수/선택, 파일 패턴)
+│   │   ├── rules.py               # REASON_CODES + EXPECTED_HEADERS
+│   │   ├── validators.py          # 룰 기반 검증 로직
+│   │   └── cross_validators.py    # 교차 검증 (출석부 vs 교육사진)
+│   ├── compliance/
+│   │   ├── slots.py
+│   │   ├── rules.py
+│   │   ├── validators.py
+│   │   └── cross_validators.py
+│   └── esg/
+│       ├── slots.py
+│       ├── rules.py
+│       ├── validators.py
+│       └── cross_validators.py    # 에너지/유해물질/윤리경영 교차 검증
+├── extractors/
+│   ├── pdf_text.py                # PDF 텍스트 추출 + 조건부 OCR 폴백
+│   ├── xlsx.py                    # XLSX/CSV 파싱 (헤더 검증 포함)
+│   └── ocr/
+│       ├── clova_client.py        # Naver Clova OCR 클라이언트
+│       └── ocr_router.py          # 이미지 OCR 라우터
+├── llm/
+│   ├── client.py                  # ask_llm() / ask_llm_vision() (Light/Heavy 분기)
+│   └── prompts.py                 # 도메인별 프롬프트 (PDF/Image/Data/Judge/Clarify)
+├── storage/
+│   ├── downloader.py              # SAS URL → 바이트 다운로드
+│   └── tmp_store.py               # 인메모리 패키지 임시 저장
+├── core/
+│   ├── config.py                  # 환경변수 (OPENAI_API_KEY, MODEL 등)
+│   └── errors.py                  # HTTP 예외 클래스
+└── db/                            # (추후 PostgreSQL 연동 예정)
+```
+
+---
+
+## 🔄 Submit 파이프라인 (6단계)
+
+```
+(1) TRIAGE        파일 분류 — 확장자/MIME 판별, 열 수 있는지 체크
+        ↓
+(2) SLOT APPLY    slot_hint 적용 — 파일을 도메인 슬롯에 매핑
+        ↓
+(3) EXTRACT       파싱/OCR — PDF→텍스트, XLSX→DataFrame, 이미지→OCR+Vision
+        ↓
+(4) VALIDATE      룰 검증 — validators.py 규칙 + LLM 이상탐지 → reasons 도출
+        ↓
+(4.5) CROSS       교차 검증 — 슬롯 간 1:1 비교 (예: 출석부 인원 vs 사진 인원)
+        ↓
+(5) CLARIFY       보완요청 생성 — PASS가 아닌 슬롯에 대해 한국어 안내문 작성
+        ↓
+(6) JUDGE FINAL   최종 집계 — 전체 verdict + risk_level + why 산출
+```
+
+---
+
+## ⚖️ Verdict & Risk Level 기준
+
+### Verdict (슬롯 단위)
+
+| Verdict | 의미 | 조건 |
+|---------|------|------|
+| **NEED_FIX** | 파일 자체 문제 (분석 불가) | MISSING_SLOT, PARSE_FAILED, HEADER_MISMATCH, EMPTY_TABLE, OCR_FAILED |
+| **NEED_CLARIFY** | 내용 문제 (분석 완료, 이슈 발견) | VIOLATION_DETECTED, LOW_EDUCATION_RATE, SIGNATURE_MISSING, E2_SPIKE_DETECTED, E3_BILL_MISMATCH, LLM_ANOMALY_DETECTED 등 |
+| **PASS** | 이상 없음 | reason 없음 |
+
+### Risk Level (업체 단위 집계)
+
+| Risk Level | 조건 |
+|------------|------|
+| **HIGH** | 하나라도 NEED_FIX가 있음 |
+| **MEDIUM** | NEED_FIX 없음, Safety/Compliance에 NEED_CLARIFY 있음 |
+| **LOW** | 모두 PASS 또는 ESG 도메인에만 NEED_CLARIFY |
+
+> ESG의 NEED_CLARIFY(사용량 급증 등)는 모니터링 대상으로, risk_level을 LOW 이상으로 올리지 않습니다.
+
+---
+
+## 🤖 Dual LLM 전략
+
+| 모델 | 환경변수 | 용도 |
+|------|----------|------|
+| GPT-4o-mini (Light) | `OPENAI_MODEL_LIGHT` | PDF 분석, 데이터 분석, 보완요청 생성 |
+| GPT-4o (Heavy) | `OPENAI_MODEL_HEAVY` | Vision 이미지 분석, 최종 판정 (JUDGE_FINAL) |
+
+---
+
+## 🚀 실행 방법
+
+```bash
+# 1. 의존성 설치
+pip install -r requirements.txt
+
+# 2. 환경변수 설정
+cp .env.example .env
+# .env 파일에 OPENAI_API_KEY, CLOVA_OCR_* 등 설정
+
+# 3. 서버 실행
+cd apps/ai_run_api
+uvicorn app.main:app --reload --port 8000
+
+# 4. 헬스체크
+curl http://localhost:8000/health
+```
+
+### Streamlit 테스트 UI (선택)
+
+```bash
+streamlit run apps/ai_run_api/ui/streamlit_app.py
+```
+
+---
+
+## 📋 API 엔드포인트
+
+| Method | Path | 설명 |
+|--------|------|------|
+| `GET` | `/health` | 서버 상태 확인 |
+| `POST` | `/run/preview` | 파일 분류 + 슬롯 추정 |
+| `POST` | `/run/submit` | 6단계 파이프라인 실행 → verdict + risk_level 반환 |
+
+---
+
+## 🔧 환경변수
+
+| 변수명 | 설명 |
+|--------|------|
+| `OPENAI_API_KEY` | OpenAI API 키 |
+| `OPENAI_MODEL_LIGHT` | 텍스트/데이터 분석 모델 (기본: gpt-4o-mini) |
+| `OPENAI_MODEL_HEAVY` | Vision/최종판정 모델 (기본: gpt-4o) |
+| `CLOVA_OCR_API_URL` | Naver Clova OCR API URL |
+| `CLOVA_OCR_SECRET` | Clova OCR Secret Key |
