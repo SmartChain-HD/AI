@@ -12,6 +12,16 @@ import httpx
 
 from app.schemas.risk import DocItem, ExternalRiskDetectRequest
 
+# 20260201 이종헌 신규: RSS 후보 수집 provider import
+from app.search.rss import esg_search_rss
+
+# 20260201 이종헌 신규: 검색 가시화용 로깅
+import logging
+logger = logging.getLogger("out_risk.search")
+
+# 20260202 이종헌 신규
+from app.search.aliases import esg_expand_company_terms
+
 
 # 역할: URL에서 도메인(출처명)만 뽑음
 def esg_domain_from_url(url: str) -> str:
@@ -44,9 +54,12 @@ def esg_build_esg_query(company_name: str, user_query: str) -> str:
     if not base:
         base = company_name
 
-    # 20260131 이종헌 수정: ESG 전용 컨텍스트를 확실히 포함(안전/환경/법규/재무는 ESG 외부 위험 신호로 해석)
+    # 20260202 이종헌 신규: alias를 OR로 묶어서 검색 커버리지 확대
+    terms = esg_expand_company_terms(base) or [base]
+    or_terms = " OR ".join([f'"{t}"' for t in terms])
+
     esg_terms = '(환경 OR 오염 OR 민원 OR 제재 OR 행정처분 OR 과징금 OR 소송 OR 회생 OR 파산 OR 부도 OR 산재 OR 중대재해 OR 임금체불 OR 파업)'
-    return f'("{base}") AND {esg_terms}'
+    return f"({or_terms}) AND {esg_terms}"
 
 
 # 역할: GDELT Doc API로 기사 목록을 가져와 DocItem으로 변환
@@ -70,10 +83,10 @@ def esg_search_gdelt(req: ExternalRiskDetectRequest) -> List[DocItem]:
         "enddatetime": end_str,
     }
 
-    # 언어 힌트: 한국어 위주 보고 싶으면 kor
+    # 20260201 이종헌 수정: 한국어 우선
     if (req.search.lang or "ko").lower().startswith("ko"):
-        params["query"] = params["query"] + " sourcelang:kor"  # 20260131 이종헌 수정: 한국어 우선
-
+        params["query"] = params["query"] + " sourcelang:kor"
+    
     items: List[DocItem] = []
     seen = set()
 
@@ -114,17 +127,55 @@ def esg_search_gdelt(req: ExternalRiskDetectRequest) -> List[DocItem]:
     return items
 
 
-# 역할: search.enabled=true일 때 문서 수집(현재는 GDELT 최소 구현)
 def esg_search_documents(req: ExternalRiskDetectRequest) -> List[DocItem]:
     if not req.search.enabled:
         return []
 
-    # sources 필터링(현재 MVP는 gdelt=뉴스 중심)
     sources = set(req.search.sources or [])
+
+    # 20260201 이종헌 수정: news가 없으면 수집하지 않음(MVP 정책)
     if sources and "news" not in sources:
-        return []  # 20260131 이종헌 수정: 요구사항의 sources에 news 없으면 아무것도 안 함(확장 지점)
+        return []
+    
+    docs: List[DocItem] = []
 
     try:
-        return esg_search_gdelt(req)
-    except Exception:
-        return []
+        gdelt_docs = esg_search_gdelt(req)
+        docs.extend(gdelt_docs)
+        logger.info("GDELT returned %d docs", len(gdelt_docs))
+    except Exception as e:
+        logger.warning("GDELT failed: %s", str(e))
+
+    # 20260201 이종헌 신규: GDELT로 max_results를 이미 채웠으면 RSS 호출을 생략(응답 지연/timeout 방지)
+    if len(docs) < int(req.search.max_results or 20):  # 신규: 부족할 때만 RSS 시도
+        try:
+            rss_docs = esg_search_rss(req)
+            docs.extend(rss_docs)
+            logger.info("RSS returned %d docs", len(rss_docs))
+        except Exception as e:
+            logger.warning("RSS failed: %s", str(e))
+
+    # 20260202 이종헌 신규: 검색어가 비어있으면 회사명으로 '관련성 필터'를 걸기
+    must = (req.search.query or "").strip() or (req.company.name or "").strip()  # 신규: 필터 기준(검색어 우선)
+    must_lower = must.lower()  # 신규: 대소문자 무시 비교용
+
+    # 20260202 이종헌 신규: title/snippet/text 중 하나라도 must를 포함하지 않으면 버림(RSS 잡음 제거)
+    filtered: List[DocItem] = []  # 신규: 필터된 문서
+    for d in docs:
+        hay = f"{d.title} {d.snippet} {d.text}".lower()  # 20260202 이종헌 신규: 검색 대상 텍스트
+        if must_lower and must_lower not in hay:
+            continue  # 신규: 회사명/검색어가 안 나오면 무관 기사로 간주
+        filtered.append(d)
+
+    # 20260202 이종헌 수정: 이후 로직은 filtered 기준으로 중복 제거
+    uniq: List[DocItem] = []
+    seen_url = set()
+    for d in filtered:  # 20260202 이종헌 수정: docs -> filtered
+        if d.url in seen_url:
+            continue
+        seen_url.add(d.url)
+        uniq.append(d)
+
+    logger.info("Merged docs=%d (unique)", len(uniq))  # 20260202 이종헌 수정: 필터/중복 제거 후 개수
+
+    return uniq[: int(req.search.max_results or 20)]

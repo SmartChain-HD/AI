@@ -1,7 +1,6 @@
-#AI/apps/out_risk_api/app/pipeline/detech.py
+# AI/apps/out_risk_api/app/pipeline/detect.py
 
-# 20260131 이종헌 수정: ESG 외부 위험 감지 파이프라인(SEARCH→RAG→분석→스코어→응답)
-from __future__ import annotations
+from app.schemas.risk import ExternalRiskDetectBatchRequest, ExternalRiskDetectBatchResponse, BatchItem
 
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
@@ -192,7 +191,10 @@ def esg_node_analyze(state: esg_State) -> esg_State:
             meta = h.get("metadata", {}) or {}
             if not text:
                 continue
-            signals.append(esg_build_signal_from_text(state.req, text=text, meta=meta))
+            sig = esg_build_signal_from_text(state.req, text=text, meta=meta)  # 20260202 이종헌 신규: 신호를 임시로 받음
+            if int(sig.severity) <= 0:  # 20260202 이종헌 신규: 키워드 히트 0(무의미) 신호는 제거
+                continue  # 20260202 이종헌 신규: score=0 쓰레기 신호 방지
+            signals.append(sig)  # 20260202 이종헌 수정: 통과한 신호만 추가
     else:
         for d in state.docs:
             text = (d.text or "").strip() or (d.snippet or "").strip()
@@ -290,3 +292,26 @@ def esg_detect_external_risk(req: ExternalRiskDetectRequest) -> ExternalRiskDete
         state = esg_node_score(state)
 
     return esg_build_response(state)
+
+# 20260202 이종헌 신규: 배치 감지(서버 내부에서 vendors 루프) - 기존 단건 함수 재사용
+def esg_detect_external_risk_batch(req: "ExternalRiskDetectBatchRequest") -> "ExternalRiskDetectBatchResponse":
+    # 20260202 이종헌 신규: 지연/timeout을 줄이기 위해 결과 리스트만 누적
+    items: list["BatchItem"] = []
+
+    for c in req.vendors:
+        try:
+            single = ExternalRiskDetectRequest(
+                company=c,
+                time_window_days=req.time_window_days,
+                categories=req.categories,
+                search=req.search,
+                documents=[],
+                rag=req.rag,
+                options=req.options,
+            )
+            result = esg_detect_external_risk(single)
+            items.append(BatchItem(company=c, result=result, error=None))
+        except Exception as e:
+            items.append(BatchItem(company=c, result=None, error=str(e)))
+
+    return ExternalRiskDetectBatchResponse(items=items)

@@ -108,3 +108,33 @@ class ExternalRiskDetectResponse(BaseModel):
     recommendations: List[str] = Field(default_factory=list)
     disclaimer: str = ""
     retrieval_meta: RetrievalMeta
+
+
+# 20260202 이종헌 신규: 여러 협력사 일괄 감지 요청/응답 스키마(기존 단건 스키마 유지)
+class ExternalRiskDetectBatchRequest(BaseModel):
+    # 협력사 목록
+    vendors: List[Company]  # 여러 회사
+
+    # 20260202 이종헌 신규: 단건과 동일한 옵션을 공통 적용
+    time_window_days: int = 90
+    categories: List[Category] = Field(default_factory=lambda: [  # 기본 카테고리
+        "SAFETY_ACCIDENT",
+        "LEGAL_SANCTION",
+        "LABOR_DISPUTE",
+        "ENV_COMPLAINT",
+        "FINANCE_LITIGATION",
+    ])
+    search: SearchConfig = Field(default_factory=SearchConfig)  # 검색 옵션
+    rag: RagConfig = Field(default_factory=RagConfig)  # RAG 옵션
+    options: Options = Field(default_factory=Options)  # 옵션
+
+class BatchItem(BaseModel):
+    company: Company  # 신규: 회사 정보
+    # 신규: 성공 결과(성공 시만)
+    result: Optional[ExternalRiskDetectResponse] = None 
+    # 신규: 실패 사유(실패 시만)
+    error: Optional[str] = None
+
+class ExternalRiskDetectBatchResponse(BaseModel):
+    # 신규: 배치 결과 목록(회사별)
+    items: List[BatchItem] = Field(default_factory=list)
