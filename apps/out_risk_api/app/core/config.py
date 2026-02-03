@@ -60,7 +60,7 @@ raw_path = esg_env("OUT_RISK_CHROMA_PATH", "")
 if raw_path:
     CHROMA_PERSIST_DIR = str((BASE_DIR / raw_path).resolve()) if not Path(raw_path).is_absolute() else raw_path
 else:
-    CHROMA_PERSIST_DIR = str(BASE_DIR / "data" / "chroma_db")
+    CHROMA_PERSIST_DIR = str(BASE_DIR / "apps" / "out_risk_api" / "app" / "vectordb")
 
 CHROMA_COLLECTION = esg_env("OUT_RISK_CHROMA_COLLECTION", "hd_hhi_out_risk_kb")
 
