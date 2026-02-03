@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     chroma_collection: str = "hd_hhi_compliance_kb"
 
     # Admin 보호
-    admin_api_key: str = "change-me"
+    admin_api_key: str
 
 
 settings = Settings()
