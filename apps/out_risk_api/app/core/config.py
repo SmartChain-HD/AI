@@ -56,14 +56,17 @@ OPENAI_API_KEY = esg_env("OPENAI_API_KEY", "")
 OPENAI_MODEL_LIGHT = esg_env("OPENAI_MODEL_LIGHT", "gpt-4o-mini")
 
 # Chroma 관련 설정 (경로는 프로젝트 루트 기준 혹은 절대경로 권장)
-CHROMA_PERSIST_DIR = esg_env(
-    "CHROMA_PERSIST_DIR",
-    str(Path(__file__).resolve().parent / ".chroma_out_risk")
-)
-CHROMA_COLLECTION = esg_env("CHROMA_COLLECTION", "out_risk")
+raw_path = esg_env("OUT_RISK_CHROMA_PATH", "")
+if raw_path:
+    CHROMA_PERSIST_DIR = str((BASE_DIR / raw_path).resolve()) if not Path(raw_path).is_absolute() else raw_path
+else:
+    CHROMA_PERSIST_DIR = str(BASE_DIR / "apps" / "out_risk_api" / "app" / "vectordb")
 
-RAG_TOP_K_DEFAULT = esg_env_int("RAG_TOP_K_DEFAULT", 6)
-RAG_CHUNK_SIZE_DEFAULT = esg_env_int("RAG_CHUNK_SIZE_DEFAULT", 800)
+CHROMA_COLLECTION = esg_env("OUT_RISK_CHROMA_COLLECTION", "hd_hhi_out_risk_kb")
+
+RAG_TOP_K_DEFAULT = esg_env_int("OUT_RISK_RAG_TOP_K_DEFAULT", 6)
+RAG_CHUNK_SIZE_DEFAULT = esg_env_int("OUT_RISK_RAG_CHUNK_SIZE_DEFAULT", 800)
+
 
 # Azure 이관 시 팁: Azure App Service 환경 설정에 OPENAI_API_KEY를 등록하면 
 # .env 파일 없이도 위 코드가 동일하게 작동합니다.
