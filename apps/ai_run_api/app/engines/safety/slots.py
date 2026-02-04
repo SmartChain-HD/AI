@@ -12,6 +12,7 @@ from typing import NamedTuple
 
 class SlotDef(NamedTuple):
     name: str
+    display_name: str
     required: bool
     patterns: list[re.Pattern[str]]
 
@@ -22,6 +23,7 @@ SLOTS: list[SlotDef] = [
     # 교육 이수 현황 (xlsx)
     SlotDef(
         name="safety.education.status",
+        display_name="안전교육 이수 현황",
         required=True,
         patterns=[
             re.compile(r"(?i)edu.*status|교육.*현황|교육.*이수|안전교육.*현황|안전교육이수현황"),
@@ -31,6 +33,7 @@ SLOTS: list[SlotDef] = [
     # 소방 점검표 (pdf/xlsx)
     SlotDef(
         name="safety.fire.inspection",
+        display_name="소방시설 점검표",
         required=True,
         patterns=[
             re.compile(r"(?i)fire.*insp|소방.*점검|소방시설.*점검|소방시설자체점검|자체점검.*결과표"),
@@ -40,6 +43,7 @@ SLOTS: list[SlotDef] = [
     # 위험성평가서 (xlsx/pdf)
     SlotDef(
         name="safety.risk.assessment",
+        display_name="위험성 평가서",
         required=True,
         patterns=[
             re.compile(r"(?i)risk.?assess|위험성.?평가|위험성평가서"),
@@ -49,6 +53,7 @@ SLOTS: list[SlotDef] = [
     # 안전보건관리체계(매뉴얼) — S1 구성요건 검사용 (pdf)
     SlotDef(
         name="safety.management.system",
+        display_name="안전보건관리체계 매뉴얼",
         required=True,
         patterns=[
             re.compile(r"(?i)management.*system|안전보건관리체계|관리체계.*매뉴얼|체계구축매뉴얼"),
@@ -58,6 +63,7 @@ SLOTS: list[SlotDef] = [
     # 현장 사진(선택) — 이미지 묶음/단일
     SlotDef(
         name="safety.site.photos",
+        display_name="현장 사진",
         required=False,
         patterns=[
             re.compile(r"(?i)site.?photo|현장.?사진|현장사진"),
@@ -67,6 +73,7 @@ SLOTS: list[SlotDef] = [
     # 교육 출석부 (스캔 PDF) — 날짜, 교육명, 이름, 서명
     SlotDef(
         name="safety.education.attendance",
+        display_name="교육 출석부",
         required=False,
         patterns=[
             re.compile(r"(?i)attend|출석부|출석명단|교육.*출석|출석.*명부"),
@@ -76,6 +83,7 @@ SLOTS: list[SlotDef] = [
     # 교육일 사진 (이미지) — 교육 현장 촬영본
     SlotDef(
         name="safety.education.photo",
+        display_name="교육일 사진",
         required=False,
         patterns=[
             re.compile(r"(?i)edu.*photo|교육.*사진|교육일.*사진|교육현장"),
@@ -84,6 +92,7 @@ SLOTS: list[SlotDef] = [
         # (선택) TBM — 이번 테스트 업로드에는 없음
     SlotDef(
         name="safety.tbm",
+        display_name="TBM(작업 전 회의)",
         required=False,
         patterns=[
             re.compile(r"(?i)\btbm\b|tool.?box.?meet|작업전.?회의|TBM"),

@@ -96,6 +96,7 @@ def _count_any(text: str, keywords: Iterable[str]) -> int:
 @dataclass(frozen=True)
 class SlotDef:
     name: str
+    display_name: str
     required: bool
 
     # 20250129 이종헌 수정: 기존 "AND 조건(둘 다 만족해야 후보)"을 "점수 그룹"으로 사용
@@ -139,6 +140,7 @@ SLOTS: list[SlotDef] = [
     # Energy
     SlotDef(
         name="esg.energy.electricity.usage",
+        display_name="전기 사용량",
         required=True,
         must_any_1=K_ELEC,
         must_any_2=K_USAGE,
@@ -146,6 +148,7 @@ SLOTS: list[SlotDef] = [
     ),
     SlotDef(
         name="esg.energy.electricity.bill",
+        display_name="전기 요금 고지서",
         required=False,
         must_any_1=K_ELEC,
         must_any_2=K_BILL,
@@ -153,6 +156,7 @@ SLOTS: list[SlotDef] = [
     ),
     SlotDef(
         name="esg.energy.gas.usage",
+        display_name="가스 사용량",
         required=True,
         must_any_1=K_GAS,
         must_any_2=K_USAGE,
@@ -160,6 +164,7 @@ SLOTS: list[SlotDef] = [
     ),
     SlotDef(
         name="esg.energy.gas.bill",
+        display_name="가스 요금 고지서",
         required=False,
         must_any_1=K_GAS,
         must_any_2=K_BILL,
@@ -167,6 +172,7 @@ SLOTS: list[SlotDef] = [
     ),
     SlotDef(
         name="esg.energy.water.usage",
+        display_name="수도 사용량",
         required=True,
         must_any_1=K_WATER,
         must_any_2=K_USAGE,
@@ -174,6 +180,7 @@ SLOTS: list[SlotDef] = [
     ),
     SlotDef(
         name="esg.energy.water.bill",
+        display_name="수도 요금 고지서",
         required=False,
         must_any_1=K_WATER,
         must_any_2=K_BILL,
@@ -181,7 +188,8 @@ SLOTS: list[SlotDef] = [
     ),
     SlotDef(
         name="esg.energy.ghg.evidence",
-        required=False, 
+        display_name="온실가스 배출 증빙",
+        required=False,
         must_any_1=("ghg", "온실가스", "탄소", "co2", "scope"),
         must_any_2=K_GHG,
         boost=("emission factor", "배출계수", "scope1", "scope2"),
@@ -189,6 +197,7 @@ SLOTS: list[SlotDef] = [
     # Hazmat
     SlotDef(
         name="esg.hazmat.msds",
+        display_name="물질안전보건자료(MSDS)",
         required=True,
         must_any_1=K_MSDS,
         must_any_2=K_HAZ,
@@ -196,20 +205,23 @@ SLOTS: list[SlotDef] = [
     ),
     SlotDef(
         name="esg.hazmat.inventory",
-        required=True, 
+        display_name="유해물질 목록",
+        required=True,
         must_any_1=K_HAZ,
         must_any_2=K_INV,
         boost=("inventory", "재고", "보관", "storage", "유해물질목록"),
     ),
     SlotDef(
         name="esg.hazmat.disposal.list",
-        required=False, 
+        display_name="폐기물 처리 목록",
+        required=False,
         must_any_1=K_DISPOSAL,
         must_any_2=("목록", "list", "manifest", "대장"),
         boost=("manifest", "올바로", "인계서"),
     ),
     SlotDef(
         name="esg.hazmat.disposal.evidence",
+        display_name="폐기물 처리 증빙",
         required=False,
         must_any_1=K_DISPOSAL,
         must_any_2=("계약", "확인", "인계", "증빙", "pdf", "document", "report"),
@@ -219,6 +231,7 @@ SLOTS: list[SlotDef] = [
     # Ethics / Governance
     SlotDef(
         name="esg.ethics.code",
+        display_name="윤리강령/행동강령",
         required=True,
         must_any_1=K_ETHICS,
         must_any_2=("개정", "revision", "시행", "policy", "규정", "강령", "code"),
@@ -226,6 +239,7 @@ SLOTS: list[SlotDef] = [
     ),
     SlotDef(
         name="esg.ethics.distribution.log",
+        display_name="윤리강령 배포 로그",
         required=True,
         must_any_1=K_ETHICS,
         must_any_2=K_LOG,
@@ -233,13 +247,15 @@ SLOTS: list[SlotDef] = [
     ),
     SlotDef(
         name="esg.ethics.pledge",
-        required=True,  
+        display_name="윤리 서약서",
+        required=True,
         must_any_1=K_ETHICS,
         must_any_2=K_PLEDGE,
         boost=("서약서", "pledge", "확인서", "acknowledgement", "acknowledgment"),
     ),
     SlotDef(
         name="esg.ethics.poster.image",
+        display_name="윤리경영 포스터/이미지",
         required=True,
         must_any_1=K_POSTER,
         must_any_2=K_ETHICS,

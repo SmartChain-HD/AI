@@ -206,7 +206,7 @@ async def _extract_and_analyse(
 
 
 # ── (4) VALIDATE ───────────────────────────────────────
-def _validate_slot(extractions: list[dict], slot_name: str) -> SlotResult:
+def _validate_slot(extractions: list[dict], slot_name: str, domain: str) -> SlotResult:
     """슬롯에 매핑된 모든 파일의 추출 결과를 종합하여 verdict를 결정."""
     all_reasons: list[str] = []
     file_ids: list[str] = []
@@ -244,8 +244,14 @@ def _validate_slot(extractions: list[dict], slot_name: str) -> SlotResult:
     else:
         verdict = "PASS"
 
+    # display_name 조회
+    slots_mod = get_slots_module(domain)
+    display_name_map = {s.name: s.display_name for s in slots_mod.SLOTS}
+    display_name = display_name_map.get(slot_name, "")
+
     return SlotResult(
         slot_name=slot_name,
+        display_name=display_name,
         verdict=verdict,
         reasons=reasons,
         file_ids=file_ids,
@@ -326,11 +332,16 @@ async def _final_aggregate(
     clarifications: list[Clarification],
 ) -> SubmitResponse:
     """전체 verdict = 슬롯 verdict 중 가장 나쁜 것. GPT-4o로 why 생성."""
+    # display_name 조회용 매핑
+    slots_mod = get_slots_module(domain)
+    display_name_map = {s.name: s.display_name for s in slots_mod.SLOTS}
+
     # 누락 슬롯도 slot_results에 추가
     for s in missing_slots:
         slot_results.append(
             SlotResult(
                 slot_name=s,
+                display_name=display_name_map.get(s, ""),
                 verdict="NEED_FIX",
                 reasons=["MISSING_SLOT"],
                 file_ids=[],
@@ -441,7 +452,7 @@ async def run_submit(req: SubmitRequest) -> SubmitResponse:
     for ex in extractions:
         slot_groups[ex["slot_name"]].append(ex)
 
-    slot_results = [_validate_slot(exs, sn) for sn, exs in slot_groups.items()]
+    slot_results = [_validate_slot(exs, sn, req.domain) for sn, exs in slot_groups.items()]
 
     # 누락 슬롯 확인
     slots_mod = get_slots_module(req.domain)
@@ -450,6 +461,8 @@ async def run_submit(req: SubmitRequest) -> SubmitResponse:
     missing = [s for s in required if s not in provided]
 
     # (4.5) 도메인별 교차 검증 (슬롯 간 1:1 비교)
+    # display_name 조회용 매핑
+    display_name_map = {s.name: s.display_name for s in slots_mod.SLOTS}
     try:
         import importlib
         cross_mod = importlib.import_module(f"app.engines.{req.domain}.cross_validators")
@@ -461,6 +474,7 @@ async def run_submit(req: SubmitRequest) -> SubmitResponse:
             mapped_v = _CV_VERDICT_MAP.get(raw_v, raw_v)
             slot_results.append(SlotResult(
                 slot_name=cr["slot_name"],
+                display_name=display_name_map.get(cr["slot_name"], ""),
                 verdict=mapped_v,
                 reasons=cr.get("reasons", []),
                 file_ids=[],
