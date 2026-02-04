@@ -23,12 +23,14 @@ class FileRef(BaseModel):
 class SlotHint(BaseModel):
     file_id: str
     slot_name: str
+    display_name: str = ""
     confidence: float = Field(default=1.0, ge=0, le=1)
     match_reason: str = "filename_keyword"
 
 
 class SlotStatus(BaseModel):
     slot_name: str
+    display_name: str = ""
     status: SlotStatusEnum
 
 
@@ -60,6 +62,7 @@ class SubmitRequest(BaseModel):
 
 class SlotResult(BaseModel):
     slot_name: str
+    display_name: str = ""
     verdict: Verdict
     reasons: list[str] = []
     file_ids: list[str] = []

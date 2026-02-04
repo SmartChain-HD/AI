@@ -69,6 +69,8 @@ async def _llm_match_slot(filename: str, slot_names: list[str]) -> tuple[str, fl
 async def _suggest_slots(files: list[FileRef], domain: str) -> list[SlotHint]:
     slots_mod = get_slots_module(domain)
     all_slot_names = [s.name for s in slots_mod.SLOTS]
+    # slot_name -> display_name 매핑
+    display_name_map = {s.name: s.display_name for s in slots_mod.SLOTS}
     hints: list[SlotHint] = []
 
     # LLM 폴백이 필요한 파일 모으기
@@ -83,6 +85,7 @@ async def _suggest_slots(files: list[FileRef], domain: str) -> list[SlotHint]:
                 SlotHint(
                     file_id=f.file_id,
                     slot_name=slot_name,
+                    display_name=display_name_map.get(slot_name, ""),
                     confidence=0.99,
                     match_reason="filename_keyword",
                 )
@@ -99,6 +102,7 @@ async def _suggest_slots(files: list[FileRef], domain: str) -> list[SlotHint]:
                 SlotHint(
                     file_id=f.file_id,
                     slot_name=slot_name,
+                    display_name=display_name_map.get(slot_name, ""),
                     confidence=confidence,
                     match_reason="llm_filename",
                 )
@@ -118,12 +122,12 @@ def _evaluate_coverage(
     missing: list[str] = []
     for slot in all_slots:
         if slot.name in provided:
-            statuses.append(SlotStatus(slot_name=slot.name, status="SUBMITTED"))
+            statuses.append(SlotStatus(slot_name=slot.name, display_name=slot.display_name, status="SUBMITTED"))
         elif slot.required:
-            statuses.append(SlotStatus(slot_name=slot.name, status="MISSING"))
+            statuses.append(SlotStatus(slot_name=slot.name, display_name=slot.display_name, status="MISSING"))
             missing.append(slot.name)
         else:
-            statuses.append(SlotStatus(slot_name=slot.name, status="MISSING"))
+            statuses.append(SlotStatus(slot_name=slot.name, display_name=slot.display_name, status="MISSING"))
 
     return statuses, missing
 
