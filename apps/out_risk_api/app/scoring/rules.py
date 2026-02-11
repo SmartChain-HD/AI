@@ -9,19 +9,29 @@ from typing import Optional
 from app.schemas.risk import RiskLevel
 
 
-# 20260131 이종헌 신규: YYYY-MM-DD 문자열 날짜 파싱 유틸
+# 20260211 이종헌 수정: ISO/Z 형식까지 파싱하도록 확장
 def esg_parse_date_ymd(s: str) -> Optional[datetime]:
-    try:
-        return datetime.strptime(s, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-    except Exception:
+    value = (s or "").strip()
+    if not value:
         return None
+    try:
+        if "T" in value and value.endswith("Z"):
+            return datetime.strptime(value, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except Exception:
+        try:
+            return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except Exception:
+            return None
 
 
-# 20260203 이종헌 수정: 최근성 가중치(30/90/180일) 계산 규칙
+# 20260211 이종헌 수정: naive datetime UTC 보정 및 기본 가중치 정합화
 def esg_recency_weight(published_at: str) -> float:
     dt = esg_parse_date_ymd(published_at)
     if not dt:
-        return 1.0
+        return 0.7
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
 
     now = datetime.now(timezone.utc)
     days = (now - dt).days
@@ -32,13 +42,13 @@ def esg_recency_weight(published_at: str) -> float:
         return 1.0
     if days <= 180:
         return 0.7
-    return 0.5
+    return 0.4
 
 
-# 20260203 이종헌 수정: total_score를 LOW/MEDIUM/HIGH로 매핑
+# 20260211 이종헌 수정: RiskLevel Enum 반환으로 타입 정합성 강화
 def esg_level_from_total(total_score: float) -> RiskLevel:
     if total_score >= 10:
-        return "HIGH"
+        return RiskLevel.HIGH
     if total_score >= 5:
-        return "MEDIUM"
-    return "LOW"
+        return RiskLevel.MEDIUM
+    return RiskLevel.LOW

@@ -7,11 +7,18 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 
 
-# 수정: Literal 대신 Enum(str)로 정의해 RiskLevel.LOW 사용/문자열 반환 모두 안전하게 처리
+# 20260211 이종헌 수정: Literal 대신 Enum(str)로 정의해 RiskLevel.LOW 사용/문자열 반환 모두 안전하게 처리
 class RiskLevel(str, Enum):
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
+
+
+# 20260211 이종헌 수정: classifier/summarizer 연동용 category enum 추가
+class Category(str, Enum):
+    SAFETY_ACCIDENT = "SAFETY_ACCIDENT"
+    LEGAL_SANCTION = "LEGAL_SANCTION"
+    GENERAL = "GENERAL"
 
 
 class RagConfig(BaseModel):
@@ -25,6 +32,17 @@ class DocItem(BaseModel):
     source: str
     published_at: Optional[str] = None
     snippet: Optional[str] = None
+
+
+# 20260211 이종헌 수정: 분류 신호 구조체 추가(classifier 출력 스키마)
+class Signal(BaseModel):
+    category: Category
+    severity: int = Field(ge=0)
+    score: float = Field(ge=0)
+    title: str
+    summary_ko: str
+    why: str
+    published_at: Optional[str] = None
 
 
 class ExternalRiskDetectVendorResult(BaseModel):

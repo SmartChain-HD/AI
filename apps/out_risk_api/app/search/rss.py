@@ -16,6 +16,9 @@ import httpx
 from app.schemas.risk import DocItem, SearchPreviewRequest
 from app.search.aliases import esg_expand_company_terms
 
+# 20260211 이종헌 수정: 고정 RSS 피드 병합 수집 연결
+from app.search.rss_sources import RSS_FEEDS
+
 logger = logging.getLogger("out_risk.search")
 
 
@@ -81,7 +84,7 @@ def _esg_filter_docs_relaxed(docs: List[DocItem]) -> List[DocItem]:
     return kept
 
 
-# 20260202 이종헌 수정: vendor+alias 기반 RSS 검색 후 DocItem 반환
+# 20260211 이종헌 수정: 검색 RSS + 고정 RSS 소스 병합 및 최대 feed 수 상향
 def esg_search_rss(req: SearchPreviewRequest) -> List[DocItem]:
     """
     RSS 검색(완화 모드):
@@ -95,10 +98,19 @@ def esg_search_rss(req: SearchPreviewRequest) -> List[DocItem]:
             return []
         terms = esg_expand_company_terms(base_q) or [base_q]
         terms = terms[:2]
-        return [
+        search_feeds = [
             f"https://news.google.com/rss/search?q={quote_plus(t)}&hl=ko&gl=KR&ceid=KR:ko"
             for t in terms
         ]
+        merged: list[str] = []
+        seen: set[str] = set()
+        for feed in search_feeds + list(RSS_FEEDS):
+            f = (feed or "").strip()
+            if not f or f in seen:
+                continue
+            seen.add(f)
+            merged.append(f)
+        return merged
 
     logger.info("RSS search start vendor=%s", req.vendor)
     feeds = esg_build_rss_search_feeds(req)
@@ -108,7 +120,7 @@ def esg_search_rss(req: SearchPreviewRequest) -> List[DocItem]:
     items: List[DocItem] = []
     seen_url = set()
     max_total = 20
-    max_feeds = min(2, len(feeds))
+    max_feeds = min(4, len(feeds))
 
     timeout = httpx.Timeout(connect=1.0, read=1.2, write=1.0, pool=1.0)
 
