@@ -12,6 +12,7 @@ Preview 파이프라인 (기획서 §4.1).
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 from app.engines.registry import get_slots_module
@@ -94,19 +95,29 @@ async def _suggest_slots(files: list[FileRef], domain: str) -> list[SlotHint]:
             unmatched.append((f, fname))
 
     # 매칭 안 된 파일 → LLM 폴백
-    for f, fname in unmatched:
-        llm_result = await _llm_match_slot(fname, all_slot_names)
-        if llm_result:
-            slot_name, confidence = llm_result
-            hints.append(
-                SlotHint(
-                    file_id=f.file_id,
-                    slot_name=slot_name,
-                    display_name=display_name_map.get(slot_name, ""),
-                    confidence=confidence,
-                    match_reason="llm_filename",
+    if unmatched:
+        sem = asyncio.Semaphore(4)
+
+        async def _run_llm(fname: str) -> tuple[str, float] | None:
+            async with sem:
+                return await _llm_match_slot(fname, all_slot_names)
+
+        results = await asyncio.gather(*[_run_llm(fname) for _, fname in unmatched], return_exceptions=True)
+
+        for (f, _), llm_result in zip(unmatched, results):
+            if isinstance(llm_result, Exception):
+                continue
+            if llm_result:
+                slot_name, confidence = llm_result
+                hints.append(
+                    SlotHint(
+                        file_id=f.file_id,
+                        slot_name=slot_name,
+                        display_name=display_name_map.get(slot_name, ""),
+                        confidence=confidence,
+                        match_reason="llm_filename",
+                    )
                 )
-            )
 
     return hints
 

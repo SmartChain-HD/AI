@@ -53,6 +53,7 @@ EXPECTED_HEADERS: dict[str, list[str]] = {
 # reason code 표준(가능한 한 공통 코드 유지)
 # -------------------------------------------------------
 REASON_CODES: dict[str, str] = {
+    "INFO_ANALYSIS_OK": "AI analysis completed (pass)",
     # 공통
     "MISSING_SLOT": "필수 슬롯 누락",
     "PARSE_FAILED": "파싱 실패",

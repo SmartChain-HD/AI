@@ -132,6 +132,13 @@ def _esg_validate_ocr_unreadable(extracted: dict) -> list[str]:
     reasons: list[str] = []
     text = extracted.get("text", "") or ""
     base_reasons = extracted.get("reasons", []) or []
+    extras = extracted.get("extras", {}) or {}
+
+    vision_used = str(extras.get("vision_used", "")).lower() == "true"
+    ocr_status = str(extras.get("ocr_status", "")).upper()
+
+    if ocr_status == "FALLBACK_VISION" or vision_used:
+        return reasons
     if "OCR_FAILED" in base_reasons or len(text.strip()) < 80:
         reasons.append("G_OCR_UNREADABLE")
     return reasons
@@ -170,7 +177,7 @@ def validate_slot(slot_name: str, file_type: str, extracted: dict) -> list[str]:
     # 20260130 이종헌 수정: 전기, 가스, 수도 완화
     # ── 전기 사용량(E1/E2) ──────────────────────────────────
     if slot_name in ("esg.energy.electricity.usage_xlsx", "esg.energy.electricity.usage") and file_type == "xlsx":
-        df = _esg_read_df(extracted.get("df_preview", ""))
+        df = _esg_read_df(extracted.get("df_full") or extracted.get("df_preview", ""))
 
         time_col = _pick_col(df, ("date", "timestamp", "datetime", "ts", "일자", "날짜"))
         val_col = _pick_col(df, ("Usage_kWh", "usage_kwh", "kwh", "KWH", "사용량", "전력사용량"))
@@ -191,7 +198,7 @@ def validate_slot(slot_name: str, file_type: str, extracted: dict) -> list[str]:
 
     # ── 가스 사용량(E1/E2) ──────────────────────────────────
     elif slot_name in ("esg.energy.gas.usage_xlsx", "esg.energy.gas.usage") and file_type == "xlsx":
-        df = _esg_read_df(extracted.get("df_preview", ""))
+        df = _esg_read_df(extracted.get("df_full") or extracted.get("df_preview", ""))
 
         time_col = _pick_col(df, ("timestamp", "date", "datetime", "ts", "일자", "날짜"))
         val_col = _pick_col(df, ("flow_m3", "Flow_m3", "usage_m3", "Usage_m3", "m3", "㎥", "사용량", "가스사용량"))
@@ -206,7 +213,7 @@ def validate_slot(slot_name: str, file_type: str, extracted: dict) -> list[str]:
 
     # ── 수도 사용량 ───────────────────────────────────
     elif slot_name in ("esg.energy.water.usage_xlsx", "esg.energy.water.usage") and file_type == "xlsx":
-        df = _esg_read_df(extracted.get("df_preview", ""))
+        df = _esg_read_df(extracted.get("df_full") or extracted.get("df_preview", ""))
 
         time_col = _pick_col(df, ("timestamp", "date", "datetime", "ts", "일자", "날짜"))
         val_col = _pick_col(df, ("Usage_m3", "usage_m3", "m3", "㎥", "사용량", "수도사용량"))

@@ -93,36 +93,46 @@ def _find_best_matches(lines: list[str], terms: list[str], limit: int = 4) -> li
     return selected
 
 
-def _fallback_chat_response(question: str, context: str) -> ChatResponse:
+def _fallback_chat_response(question: str, context: str, doc_name: str | None = None) -> ChatResponse:
     lines = _clean_context_lines(context)
     terms = _normalize_question_terms(question)
-    matched = _find_best_matches(lines, terms)
+    matched = _find_best_matches(lines, terms, limit=6)
+    doc_title = doc_name or "선택 문서"
 
     if matched and terms:
-        key_phrase = " ".join(terms[:3])
+        key_phrase = " ".join(terms[:3]) or question.strip()
+        key_points = "\n".join(f"- {line}" for line in matched[:3])
+        evidence = "\n".join(f"- {line}" for line in matched)
         answer = (
-            "현재 GPT 고급 분석 연결이 제한되어 문서 원문 기준으로 답변드립니다.\n"
-            f"결론: 문서에서 '{key_phrase}' 관련 항목이 확인됩니다.\n"
-            "근거:\n"
-            + "\n".join(f"- {line}" for line in matched)
+            f"{doc_title} 기준으로 질문('{key_phrase}')에 대한 내용을 정리했습니다.\n"
+            "핵심 요약:\n"
+            f"{key_points}\n\n"
+            "근거 문장:\n"
+            f"{evidence}\n\n"
+            "추가 확인이 필요하면 조항명/수치(예: 지급기한, 위약금, 계약기간)를 지정해 다시 질문해 주세요."
         )
+        confidence = "medium"
     elif matched:
+        preview = "\n".join(f"- {line}" for line in matched[:5])
         answer = (
-            "현재 GPT 고급 분석 연결이 제한되어 문서 원문 기준으로 답변드립니다.\n"
+            f"{doc_title}에서 질문과 연관된 원문을 찾았습니다.\n"
             "관련 원문:\n"
-            + "\n".join(f"- {line}" for line in matched)
+            f"{preview}\n\n"
+            "질문 범위를 조금 더 좁혀주시면(대상 조항/기간/금액) 답변을 더 정확히 정리할 수 있습니다."
         )
+        confidence = "low"
     else:
         answer = (
-            "현재 GPT 고급 분석 연결이 제한되어 상세 추론 답변이 어렵습니다. "
-            "질문에 포함할 키워드(문서명, 항목명, 날짜, 수치)를 더 구체적으로 입력해 주세요."
+            f"{doc_title}에서 질문과 직접 연결되는 텍스트를 찾지 못했습니다. "
+            "질문에 문서명, 조항명, 날짜, 수치 키워드를 포함해 다시 요청해 주세요."
         )
+        confidence = "low"
 
     return ChatResponse(
         answer=answer,
         sources=[],
-        confidence="low",
-        notes="AI 엔진 호출 실패로 기본 응답을 반환했습니다.",
+        confidence=confidence,
+        notes="문서 원문 기반 응답입니다.",
     )
 
 
@@ -133,18 +143,15 @@ def chat(req: ChatRequest) -> ChatResponse:
     if req.file_url:
         extracted_context = _download_and_extract(req.file_url)
         if extracted_context:
-            # Keep prompt size bounded.
-            message = (
-                "다음 문서를 참고해 답변해 주세요.\n\n"
-                f"[문서 내용]\n{extracted_context[:20000]}\n\n"
-                f"질문: {req.message}"
-            )
+            # 파일이 선택된 질문은 원문 기반 응답을 우선 적용해
+            # 외부 LLM 연결 장애(리전 제한 등)에도 안정적으로 답변한다.
+            return _fallback_chat_response(req.message, extracted_context, req.doc_name)
 
     try:
         rag = get_rag_service()
     except Exception as e:
         logger.exception("RAG service initialization failed: %s", e)
-        return _fallback_chat_response(req.message, extracted_context)
+        return _fallback_chat_response(req.message, extracted_context, req.doc_name)
 
     try:
         return rag.answer(
@@ -156,4 +163,4 @@ def chat(req: ChatRequest) -> ChatResponse:
         )
     except Exception as e:
         logger.exception("Chat processing failed: %s", e)
-        return _fallback_chat_response(req.message, extracted_context)
+        return _fallback_chat_response(req.message, extracted_context, req.doc_name)

@@ -77,6 +77,7 @@ app/
 |--------|------|
 | `OPENAI_API_KEY` | OpenAI API 키 |
 | `OPENAI_MODEL_LIGHT` | 텍스트/데이터 분석 모델 (기본: gpt-4o-mini) |
-| `OPENAI_MODEL_HEAVY` | Vision/최종판정 모델 (기본: gpt-5.1) |
+| `OPENAI_MODEL_HEAVY` | 최종 판정 모델 (기본: gpt-5.1) |
+| `OPENAI_MODEL_VISION` | 이미지 분석 전용 모델 (기본: gpt-4o) |
 | `CLOVA_INVOKE_URL` | Naver Clova OCR API URL |
 | `CLOVA_OCR_SECRET` | Clova OCR Secret Key |

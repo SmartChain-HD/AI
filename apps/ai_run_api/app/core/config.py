@@ -10,6 +10,8 @@ CLOVA_OCR_SECRET: str = os.getenv("CLOVA_OCR_SECRET", "")
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL_LIGHT: str = os.getenv("OPENAI_MODEL_LIGHT", "gpt-4o-mini")
 OPENAI_MODEL_HEAVY: str = os.getenv("OPENAI_MODEL_HEAVY", "gpt-5.1")
+# 선택값: 설정하지 않으면 OPENAI_MODEL_LIGHT/HEAVY를 순차 사용한다.
+OPENAI_MODEL_VISION: str = os.getenv("OPENAI_MODEL_VISION", "gpt-4o")
 
 FILE_FETCH_TIMEOUT: int = 30
 MAX_PARALLEL_WORKERS: int = 10

@@ -25,6 +25,9 @@ _IMAGE_JSON_SCHEMA = (
     '{"dates": ["YYYY-MM-DD", ...], '
     '"detected_objects": ["object1", ...], '
     '"violations": ["description", ...], '
+    '"ppe_summary": {"helmet":{"worn":0,"not_worn":0},"vest":{"worn":0,"not_worn":0},"safety_shoes":{"worn":0,"not_worn":0}}, '
+    '"workers": [{"id":"w1","ppe":{"helmet":true,"vest":false,"safety_shoes":true},"bbox":[0,0,0,0]}], '
+    '"non_compliant_workers": [{"id":"w2","missing_ppe":["helmet"],"bbox":[0,0,0,0]}], '
     '"scene_description": "one-line description", '
     '"person_count": <integer, 0 if none visible>, '
     '"anomalies": ["issue1", ...], '
@@ -35,7 +38,11 @@ _JUDGE_JSON_SCHEMA = (
     '{"risk_level": "HIGH" or "MEDIUM" or "LOW", '
     '"verdict": "PASS" or "NEED_FIX" or "NEED_CLARIFY", '
     '"why": "concise explanation in Korean", '
-    '"extras": {"key": "value", ...}}\n'
+    '"extras": {'
+    '"recognition_result": "overall recognition outcome", '
+    '"failure_reasons": "comma-separated failure reasons", '
+    '"failure_explanation": "short explanation of failure details", '
+    '"key": "value", ...}}\n'
 )
 
 # ═══════════════════════════════════════════════════════════
@@ -111,8 +118,11 @@ DATA_ANALYSIS: dict[str, str] = {
 IMAGE_VISION: dict[str, str] = {
     "safety": (
         "You are a construction safety inspector with computer vision expertise. "
-        "Focus on: PPE (helmets, harnesses, vests), safety signage, "
+        "Focus on: PPE (helmet, vest, safety shoes), safety signage, "
         "fall protection, fire extinguishers, and site hazards.\n"
+        "For each visible worker, identify PPE wearing status. "
+        "If PPE is missing, include that worker in non_compliant_workers. "
+        "Bounding box is optional; if uncertain use [0,0,0,0].\n"
         f"Analyze the image and return JSON only:\n{_IMAGE_JSON_SCHEMA}{_JSON_TAIL}"
     ),
     "compliance": (
@@ -131,11 +141,11 @@ IMAGE_VISION: dict[str, str] = {
 
 IMAGE_VISION_USER: dict[str, str] = {
     "safety": (
-        "Analyze this safety inspection image. "
-        "Identify all dates, safety equipment/objects, any violations, "
-        "and describe the scene. "
-        "ALWAYS count the number of people visible in the image and return it as person_count (integer). "
-        "If no people are visible, return person_count: 0. Never return null for person_count."
+        "Analyze this work/TBM safety photo. "
+        "Identify PPE compliance for helmet, vest, and safety shoes per worker. "
+        "Return person_count as integer (0 if none), and list non_compliant_workers. "
+        "bbox is optional and may be [0,0,0,0] if unavailable. "
+        "Never return null for person_count."
     ),
     "compliance": (
         "Analyze this compliance document image. "
@@ -197,6 +207,15 @@ CLARIFICATION_TEMPLATE = (
 # ═══════════════════════════════════════════════════════════
 # 헬퍼 — domain 키로 프롬프트 꺼내기
 # ═══════════════════════════════════════════════════════════
+PASS_RESULT_TEMPLATE = (
+    "You are a document review assistant for a safety compliance system. "
+    "You are given a slot name, one or more file names, and PASS evidence points. "
+    "Write a concise Korean user message explaining why this slot passed. "
+    "Use only the provided evidence and avoid internal codes/system jargon. "
+    "Return a single Korean string message, not JSON."
+)
+
+
 def get_prompt(prompt_dict: dict[str, str], domain: str) -> str:
     """도메인 키가 없으면 safety 폴백."""
     return prompt_dict.get(domain, prompt_dict["safety"])

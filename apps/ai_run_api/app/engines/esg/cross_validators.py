@@ -1,12 +1,7 @@
-# app/engines/esg/cross_validators.py
+﻿# app/engines/esg/cross_validators.py
 
 """
 ESG cross validators
-- esg_cross_checks(): 슬롯 간 교차검증 (E3 / 피크 비교 / 폐기교차 / MSDS 커버리지 / 서약일 비교 등)
-
-submit에서 이 파일의 esg_cross_checks()를 호출할 예정이라는 점 확실히 인지함.
-
-※ 20260129 이종헌 수정: 고지서 파싱(_parse_bill_fields / _parse_date_any)을 validators.py에서 이 파일로 이동
 """
 
 from __future__ import annotations
@@ -18,14 +13,12 @@ from typing import Any
 import pandas as pd
 
 from app.engines.esg.validators import (
-    _spike_threshold,
     _esg_read_df,
 )
 
 
-# 20260129 이종헌 수정: (이전 validators.py) 날짜 파서 이동
 def _parse_date_any(text: str) -> date | None:
-    """YYYY-MM-DD / YYYY.MM.DD / YYYY/MM/DD 패턴 1개만 추출."""
+    """YYYY-MM-DD / YYYY.MM.DD / YYYY/MM/DD"""
     if not text:
         return None
     m = re.search(r"(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})", text)
@@ -37,9 +30,8 @@ def _parse_date_any(text: str) -> date | None:
         return None
 
 
-# 20260129 이종헌 수정: (이전 validators.py) 고지서 파서 이동
 def _parse_bill_fields(pdf_text: str) -> dict[str, Any]:
-    """고지서 PDF에서 기간/합계 추출."""
+    """고지서 PDF에서 당월 사용량과 청구 기간을 추출한다."""
     out: dict[str, Any] = {
         "bill_total": None,
         "bill_unit": None,
@@ -48,7 +40,18 @@ def _parse_bill_fields(pdf_text: str) -> dict[str, Any]:
     }
     if not pdf_text:
         return out
-    m = re.search(r"당월\s*사용량\s*([\d,]+)\s*(kwh|kWh|m3|m³|톤)", pdf_text, re.IGNORECASE)
+
+    m = re.search(
+        r"(?:당월\s*사용량|사용량|usage)\s*[:：]?\s*([\d,]+(?:\.\d+)?)\s*(kwh|m3|m³|㎥|톤|ton|t)",
+        pdf_text,
+        re.IGNORECASE,
+    )
+    if not m:
+        m = re.search(
+            r"([\d,]+(?:\.\d+)?)\s*(kwh|m3|m³|㎥|톤|ton|t)",
+            pdf_text,
+            re.IGNORECASE,
+        )
     if m:
         out["bill_total"] = float(m.group(1).replace(",", ""))
         out["bill_unit"] = m.group(2)
@@ -79,9 +82,8 @@ def _pick_all(extractions_by_slot: dict[str, list[dict]], candidates: set[str]) 
 
 def _daily_peak(df: pd.DataFrame, time_col: str, value_col: str) -> float | None:
     try:
-        # 20260130 이종헌 추가: 컬럼 없으면 alias로 대체
         if time_col not in df.columns:
-          for c in ("date", "timestamp", "datetime", "ts", "일자", "날짜"):
+          for c in ("date", "timestamp", "datetime", "ts", "time", "일자", "날짜"):
             if c in df.columns:
                 time_col = c
                 break
@@ -107,9 +109,8 @@ def _daily_peak(df: pd.DataFrame, time_col: str, value_col: str) -> float | None
 def _monthly_sum(df: pd.DataFrame, time_col: str, value_col: str) -> dict[tuple[int, int], float]:
     out: dict[tuple[int, int], float] = {}
     try:
-        # 20260130 이종헌 추가: 컬럼 없으면 alias로 대체 
         if time_col not in df.columns:
-          for c in ("date", "timestamp", "datetime", "ts", "일자", "날짜"):
+          for c in ("date", "timestamp", "datetime", "ts", "time", "일자", "날짜"):
               if c in df.columns:
                   time_col = c
                   break
@@ -172,7 +173,6 @@ def _compare_month_total(slot_name: str, xlsx_total: float | None, bill_total: f
 
 
 def _parse_disposal_list(df: pd.DataFrame) -> list[dict[str, Any]]:
-    """폐기/처리 목록 XLSX에서 최소 파싱(컬럼명 조금 달라도 동작하게)"""
     if df.empty:
         return []
 
@@ -184,9 +184,9 @@ def _parse_disposal_list(df: pd.DataFrame) -> list[dict[str, Any]]:
                 return c
         return None
 
-    col_name = pick("물질", "material", "item", "품명")
-    col_qty = pick("수량", "량", "qty", "quantity", "amount")
-    col_date = pick("일자", "날짜", "date", "처리일", "반출일")
+    col_name = pick("물질", "material", "item", "품명", "name")
+    col_qty = pick("수량", "톤", "qty", "quantity", "amount")
+    col_date = pick("일자", "날짜", "date", "처리일", "배출일")
 
     if not col_name or not col_date:
         return []
@@ -206,7 +206,6 @@ def _parse_disposal_list(df: pd.DataFrame) -> list[dict[str, Any]]:
 
 
 def _disposal_evidence_probe(pdf_text: str) -> dict[str, Any]:
-    """증빙 PDF가 최소한의 정보를 포함하는지 빠르게 체크"""
     if not pdf_text:
         return {"has_date": False, "has_qty": False, "has_company": False}
 
@@ -217,10 +216,6 @@ def _disposal_evidence_probe(pdf_text: str) -> dict[str, Any]:
 
 
 def _inventory_chemicals(df: pd.DataFrame) -> list[dict[str, Any]]:
-    """
-    유해물질 목록에서 (물질명, MSDS_필수) 추출
-    - 네가 만든 DEMO 파일 헤더(물질명, MSDS_필수)를 우선 사용
-    """
     if df.empty:
         return []
 
@@ -241,7 +236,6 @@ def _inventory_chemicals(df: pd.DataFrame) -> list[dict[str, Any]]:
 
 
 def _msds_coverage(chemicals: list[dict[str, Any]], msds_docs: list[dict]) -> tuple[list[str], list[str]]:
-    """inventory 물질명이 제출된 MSDS 문서(text/file_name)에 있는지 체크"""
     msds_text_all = " ".join([(d.get("text", "") or "") for d in msds_docs]).lower()
     msds_names_all = " ".join([(d.get("file_name", "") or d.get("source_file_name", "") or "") for d in msds_docs]).lower()
 
@@ -261,18 +255,22 @@ def _msds_coverage(chemicals: list[dict[str, Any]], msds_docs: list[dict]) -> tu
     return missing_required, missing_optional
 
 
+def _fmt_num(v: float | None) -> str:
+    if v is None:
+        return "N/A"
+    s = f"{float(v):.3f}"
+    s = s.rstrip("0").rstrip(".")
+    return s if s else "0"
+
+
 def esg_cross_checks(
     extractions_by_slot: dict[str, list[dict]],
     period_start: date,
     period_end: date,
 ) -> list[dict[str, Any]]:
-    """
-    submit.py에서 슬롯별 그루핑이 끝난 다음 1회 호출
-    반환: "추가 슬롯결과" 리스트(slot_name, reasons, verdict, extras)
-    """
+
     out: list[dict[str, Any]] = []
 
-    # 슬롯 후보(네 slots.py / 기존 validate_slot 네이밍 둘 다 허용)
     ELEC_USAGE = {"esg.energy.electricity.usage_xlsx", "esg.energy.electricity.usage"}
     GAS_USAGE = {"esg.energy.gas.usage_xlsx", "esg.energy.gas.usage"}
     WATER_USAGE = {"esg.energy.water.usage_xlsx", "esg.energy.water.usage"}
@@ -290,61 +288,8 @@ def esg_cross_checks(
     ETHICS_LATEST = {"esg.governance.ethics.latest_pdf"}
     PLEDGE = {"esg.governance.pledge_pdf", "esg.ethics.pledge"}
 
-    # ─────────────────────────────────────────────────────────
-    # Cross-1) 2024 대비 2025 피크(이상치 탐지)
-    # - 2024 기준 데이터가 없으면 WARN 처리
-    # ─────────────────────────────────────────────────────────
-    base_2024 = _pick_first(extractions_by_slot, {"esg.energy.electricity.usage_2024_xlsx"})
-    cur_2025 = _pick_first(extractions_by_slot, ELEC_USAGE)
-
-    if not base_2024:
-        out.append({
-            "slot_name": "esg.energy.electricity.peak_2024_vs_2025",
-            "reasons": ["BASELINE_2024_MISSING"],
-            "verdict": "WARN",
-            "extras": {},
-        })
-    elif base_2024 and cur_2025:
-        df24 = _esg_read_df(base_2024.get("df_preview", ""))
-        df25 = _esg_read_df(cur_2025.get("df_preview", ""))
-        if df24.empty or df25.empty:
-            out.append({
-                "slot_name": "esg.energy.electricity.peak_2024_vs_2025",
-                "reasons": ["PARSE_FAILED"],
-                "verdict": "WARN",
-                "extras": {},
-            })
-        else:
-            p24 = _daily_peak(df24, "date", "Usage_kWh")
-            p25 = _daily_peak(df25, "date", "Usage_kWh")
-            if not p24 or not p25 or p24 <= 0:
-                out.append({
-                    "slot_name": "esg.energy.electricity.peak_2024_vs_2025",
-                    "reasons": ["BASELINE_INVALID"],
-                    "verdict": "WARN",
-                    "extras": {},
-                })
-            else:
-                ratio = float(p25 / p24)
-                sev = _spike_threshold(ratio)
-                reasons: list[str] = []
-                verdict = "PASS"
-                if sev == "FAIL":
-                    reasons.append("E_PEAK_SPIKE_FAIL")
-                    verdict = "FAIL"
-                elif sev == "WARN":
-                    reasons.append("E_PEAK_SPIKE_WARN")
-                    verdict = "WARN"
-                out.append({
-                    "slot_name": "esg.energy.electricity.peak_2024_vs_2025",
-                    "reasons": reasons,
-                    "verdict": verdict,
-                    "extras": {"peak_2024": round(p24, 3), "peak_2025": round(p25, 3), "ratio": round(ratio, 3)},
-                })
-
-    # ─────────────────────────────────────────────────────────
-    # Cross-2) 2026 10/11/12: usage 월합계 vs 고지서 당월 사용량
-    # ─────────────────────────────────────────────────────────
+    # Cross-1) 10/11/12월 사용량 vs 고지서 사용량 교차검증
+    # - 전력 피크(2024 대비 2025) 비교는 제외한다.
     def cross_month_match(
         usage_candidates: set[str],
         bill_candidates: set[str],
@@ -355,35 +300,133 @@ def esg_cross_checks(
     ) -> None:
         usage = _pick_first(extractions_by_slot, usage_candidates)
         bills = _pick_all(extractions_by_slot, bill_candidates)
-        if not usage or not bills:
+
+        if not usage and not bills:
+            out.append({
+                "slot_name": out_slot,
+                "reasons": ["E3_BILL_FIELDS_MISSING"],
+                "verdict": "NEED_FIX",
+                "extras": {"detail": "사용량 파일과 고지서 파일이 모두 누락되었습니다."},
+            })
+            return
+        if not usage:
+            out.append({
+                "slot_name": out_slot,
+                "reasons": ["E3_BILL_FIELDS_MISSING"],
+                "verdict": "NEED_FIX",
+                "extras": {"detail": "사용량 파일이 누락되어 10~12월 교차검증을 수행할 수 없습니다."},
+            })
+            return
+        if not bills:
+            out.append({
+                "slot_name": out_slot,
+                "reasons": ["E3_BILL_FIELDS_MISSING"],
+                "verdict": "NEED_FIX",
+                "extras": {"detail": "요금 고지서 파일이 누락되어 10~12월 교차검증을 수행할 수 없습니다."},
+            })
             return
 
-        df = _esg_read_df(usage.get("df_preview", ""))
-        if df.empty or time_col not in df.columns or val_col not in df.columns:
-            out.append({"slot_name": out_slot, "reasons": ["PARSE_FAILED"], "verdict": "NEED_FIX", "extras": {}})
+        df = _esg_read_df(usage.get("df_full") or usage.get("df_preview", ""))
+        if df.empty:
+            out.append({
+                "slot_name": out_slot,
+                "reasons": ["PARSE_FAILED"],
+                "verdict": "NEED_FIX",
+                "extras": {
+                    "detail": f"사용량 파일 파싱에 실패했습니다. '{time_col}' 및 '{val_col}' 계열 컬럼을 확인해 주세요.",
+                },
+            })
             return
 
         month_sum = _monthly_sum(df, time_col, val_col)
+        if not month_sum:
+            out.append({
+                "slot_name": out_slot,
+                "reasons": ["PARSE_FAILED"],
+                "verdict": "NEED_FIX",
+                "extras": {
+                    "detail": f"사용량 월합계를 계산하지 못했습니다. '{time_col}' 및 '{val_col}' 계열 컬럼을 확인해 주세요.",
+                },
+            })
+            return
 
+        bill_by_month: dict[tuple[int, int], float] = {}
+        bill_parse_fail = 0
         for b in bills:
             fields = _parse_bill_fields(b.get("text", ""))
             mk = _bill_month_key(fields)
-            if not mk:
-                out.append({"slot_name": out_slot, "reasons": ["E3_BILL_FIELDS_MISSING"], "verdict": "NEED_FIX", "extras": {}})
+            bill_total = fields.get("bill_total")
+            if not mk or bill_total is None:
+                bill_parse_fail += 1
+                continue
+            bill_by_month[mk] = float(bill_total)
+
+        if not bill_by_month:
+            out.append({
+                "slot_name": out_slot,
+                "reasons": ["E3_BILL_FIELDS_MISSING"],
+                "verdict": "NEED_FIX",
+                "extras": {"detail": "고지서에서 기간 또는 당월 사용량을 추출하지 못했습니다."},
+            })
+            return
+
+        usage_years = sorted({y for y, _ in month_sum.keys()})
+        bill_years = sorted({y for y, _ in bill_by_month.keys()})
+        target_year = int(period_end.year if period_end else period_start.year)
+        if usage_years and target_year not in usage_years:
+            target_year = usage_years[-1]
+        elif not usage_years and bill_years and target_year not in bill_years:
+            target_year = bill_years[-1]
+
+        target_months = (10, 11, 12)
+        reasons: list[str] = []
+        month_lines: list[str] = []
+        verdict = "PASS"
+
+        for m in target_months:
+            mk = (target_year, m)
+            month_str = f"{target_year}-{m:02d}"
+            xlsx_total = month_sum.get(mk)
+            bill_total = bill_by_month.get(mk)
+
+            if xlsx_total is None or bill_total is None or bill_total <= 0:
+                reasons.append("E3_BILL_FIELDS_MISSING")
+                verdict = "NEED_FIX"
+                month_lines.append(
+                    f"{month_str} 누락(사용량={_fmt_num(xlsx_total)}, 고지서={_fmt_num(bill_total)})"
+                )
                 continue
 
-            month_str = f"{mk[0]}-{mk[1]:02d}"
-            xlsx_total = month_sum.get(mk)
-            bill_total = fields.get("bill_total")
-            out.append(_compare_month_total(out_slot, xlsx_total, bill_total, tol_pct, month_str))
+            diff_pct = abs(float(xlsx_total) - float(bill_total)) / float(bill_total) * 100.0
+            if diff_pct > tol_pct:
+                reasons.append("E3_BILL_MISMATCH")
+                verdict = "NEED_FIX"
+                month_lines.append(
+                    f"{month_str} 불일치(사용량={_fmt_num(xlsx_total)}, 고지서={_fmt_num(bill_total)}, 차이={diff_pct:.2f}%, 허용={tol_pct:.2f}%)"
+                )
+            else:
+                month_lines.append(
+                    f"{month_str} 일치(사용량={_fmt_num(xlsx_total)}, 고지서={_fmt_num(bill_total)}, 차이={diff_pct:.2f}%)"
+                )
+
+        if bill_parse_fail:
+            month_lines.append(f"고지서 {bill_parse_fail}건은 기간/사용량 파싱에 실패했습니다.")
+
+        out.append({
+            "slot_name": out_slot,
+            "reasons": list(dict.fromkeys(reasons)),
+            "verdict": verdict,
+            "extras": {
+                "target_year": str(target_year),
+                "target_months": f"{target_year}-10,{target_year}-11,{target_year}-12",
+                "detail": "; ".join(month_lines),
+            },
+        })
 
     cross_month_match(ELEC_USAGE, ELEC_BILL, "date", "Usage_kWh", "esg.energy.electricity.month_match", 1.0)
     cross_month_match(GAS_USAGE, GAS_BILL, "timestamp", "flow_m3", "esg.energy.gas.month_match", 2.0)
     cross_month_match(WATER_USAGE, WATER_BILL, "timestamp", "Usage_m3", "esg.energy.water.month_match", 1.0)
 
-    # ─────────────────────────────────────────────────────────
-    # Cross-3) 폐기/처리 목록 XLSX + 폐기 증빙 PDF
-    # ─────────────────────────────────────────────────────────
     waste_list = _pick_first(extractions_by_slot, WASTE_LIST)
     waste_evi = _pick_first(extractions_by_slot, WASTE_EVI)
 
@@ -396,7 +439,7 @@ def esg_cross_checks(
                 "extras": {},
             })
         else:
-            df = _esg_read_df(waste_list.get("df_preview", ""))
+            df = _esg_read_df(waste_list.get("df_full") or waste_list.get("df_preview", ""))
             items = _parse_disposal_list(df)
             probe = _disposal_evidence_probe(waste_evi.get("text", ""))
 
@@ -428,14 +471,11 @@ def esg_cross_checks(
                 "extras": {"missing_names": missing_names},
             })
 
-    # ─────────────────────────────────────────────────────────
-    # Cross-4) 유해물질 목록(Inventory) vs MSDS 제출 커버리지
-    # ─────────────────────────────────────────────────────────
     inv = _pick_first(extractions_by_slot, INV)
     msds_docs = _pick_all(extractions_by_slot, MSDS)
 
     if inv:
-        df = _esg_read_df(inv.get("df_preview", ""))
+        df = _esg_read_df(inv.get("df_full") or inv.get("df_preview", ""))
         chems = _inventory_chemicals(df)
 
         if not chems:
@@ -464,9 +504,6 @@ def esg_cross_checks(
                 "extras": {"missing_required": missing_req, "missing_optional": missing_opt},
             })
 
-    # ─────────────────────────────────────────────────────────
-    # (기존) Cross-5) 서약일 < 윤리강령 개정일 → WARN
-    # ─────────────────────────────────────────────────────────
     ethics_latest = _pick_first(extractions_by_slot, ETHICS_LATEST)
     pledge = _pick_first(extractions_by_slot, PLEDGE)
 
@@ -482,3 +519,18 @@ def esg_cross_checks(
             })
 
     return out
+
+
+def cross_validate_slot(
+    extractions_by_slot: dict[str, list[dict]],
+    period_start: date | None = None,
+    period_end: date | None = None,
+) -> list[dict[str, Any]]:
+    """Compatibility wrapper used by submit pipeline."""
+    today = date.today()
+    return esg_cross_checks(
+        extractions_by_slot=extractions_by_slot,
+        period_start=period_start or today,
+        period_end=period_end or today,
+    )
+

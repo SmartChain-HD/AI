@@ -1,4 +1,4 @@
-"""OCR 라우터 — 이미지 파일 OCR 처리."""
+"""OCR router for image files."""
 
 from __future__ import annotations
 
@@ -7,11 +7,20 @@ from datetime import date
 
 from app.extractors.ocr.clova_client import run_ocr
 
-DATE_RE = re.compile(r"(\d{4})[.\-/년](\d{1,2})[.\-/월](\d{1,2})")
+# Supports: 2026-02-18 / 2026.2.18 / 2026 2 18
+DATE_RE = re.compile(r"(\d{4})\s*[.\-/\s]\s*(\d{1,2})\s*[.\-/\s]\s*(\d{1,2})")
 
 
 def _extract_dates(text: str) -> list[str]:
-    return [f"{m[0]}-{int(m[1]):02d}-{int(m[2]):02d}" for m in DATE_RE.findall(text)]
+    dates: list[str] = []
+    for year, month, day in DATE_RE.findall(text or ""):
+        try:
+            normalized = f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
+            if normalized not in dates:
+                dates.append(normalized)
+        except Exception:
+            continue
+    return dates
 
 
 async def extract_image(
@@ -20,23 +29,35 @@ async def extract_image(
     period_start: date,
     period_end: date,
 ) -> dict:
-    """이미지에서 OCR 텍스트/날짜 추출.
-
-    Returns dict with keys: text, dates, date_in_range, reasons
-    """
+    """Extract OCR text and date clues from image bytes."""
     reasons: list[str] = []
+    extras: dict[str, str] = {}
+
     try:
         text = await run_ocr(data, file_format)
-    except Exception:
+        extras["ocr_status"] = "SUCCESS"
+    except Exception as exc:
+        extras["ocr_status"] = "FAILED"
+        extras["ocr_error"] = f"{type(exc).__name__}: {exc}"
         return {
             "text": "",
             "dates": [],
             "date_in_range": True,
             "reasons": ["OCR_FAILED"],
+            "extras": extras,
+        }
+
+    if len((text or "").strip()) == 0:
+        extras["ocr_status"] = "UNREADABLE"
+        return {
+            "text": "",
+            "dates": [],
+            "date_in_range": True,
+            "reasons": ["G_OCR_UNREADABLE"],
+            "extras": extras,
         }
 
     dates = _extract_dates(text)
-
     date_in_range = True
     for d in dates:
         try:
@@ -46,7 +67,7 @@ async def extract_image(
                 reasons.append("DATE_MISMATCH")
                 break
         except ValueError:
-            pass
+            continue
 
     if not dates:
         reasons.append("NO_DATE_FOUND")
@@ -56,4 +77,5 @@ async def extract_image(
         "dates": dates,
         "date_in_range": date_in_range,
         "reasons": reasons,
+        "extras": extras,
     }

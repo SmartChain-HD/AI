@@ -1,34 +1,27 @@
-# AI/apps/out_risk_api/app/search/rss.py
-
-# 20260202 이종헌 수정: Google News RSS 수집/필터/중복제거 주석 보강
 from __future__ import annotations
 
 import hashlib
 import logging
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
-from typing import List
+from typing import List, Optional
 from urllib.parse import quote_plus, urlparse
 
 import httpx
 
 from app.schemas.risk import DocItem, SearchPreviewRequest
 from app.search.aliases import esg_expand_company_terms
-
-# 20260211 이종헌 수정: 고정 RSS 피드 병합 수집 연결
 from app.search.rss_sources import RSS_FEEDS
 
 logger = logging.getLogger("out_risk.search")
 
 
-# 20260201 이종헌 수정: URL/제목 기반 안정적 doc_id 해시 생성
 def esg_hash_id(value: str) -> str:
     return hashlib.sha256((value or "").encode("utf-8")).hexdigest()[:16]
 
 
-# 20260201 이종헌 수정: RSS pubDate를 YYYY-MM-DD로 표준화
-def esg_safe_ymd(pub_text: str) -> str:
+def _safe_iso_date(pub_text: str) -> str:
     s = (pub_text or "").strip()
     if not s:
         return ""
@@ -43,64 +36,87 @@ def esg_safe_ymd(pub_text: str) -> str:
             return ""
 
 
-# 20260202 이종헌 수정: RSS 검색 결과 ESG 키워드 필터
+def _parse_doc_datetime(value: Optional[str]) -> Optional[datetime]:
+    s = (value or "").strip()
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except Exception:
+        try:
+            return datetime.strptime(s, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except Exception:
+            return None
+
+
+def _within_time_window(published_at: Optional[str], time_window_days: int) -> bool:
+    dt = _parse_doc_datetime(published_at)
+    if not dt:
+        return True
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    age = datetime.now(timezone.utc) - dt
+    return age <= timedelta(days=max(1, time_window_days))
+
+
 def _esg_keywords() -> List[str]:
     return [
-        "사고", "산재", "산업재해", "중대재해", "중대재해처벌법", "사망", "부상",
-        "작업중", "안전", "안전사고", "안전관리", "위험물", "폭발", "화재", "붕괴",
-        "노동", "노조", "파업", "분쟁", "해고", "임금체불", "근로감독",
-        "산업안전보건법", "안전보건", "노동안전",
-        "환경", "환경규제", "환경오염", "오염", "대기오염", "수질오염", "토양오염",
-        "폐수", "배출", "배출가스", "유출", "누출", "유해물질", "화학물질",
-        "탄소", "온실가스", "탄소배출", "배출권", "기후", "ESG",
-        "불법", "위반", "수사", "조사", "압수수색", "기소", "고소", "고발", "혐의",
-        "법원", "재판", "판결", "벌금", "과징금", "제재", "처분", "영업정지", "허가취소",
-        "공정위", "공정거래위원회", "금감원", "금융감독원", "검찰", "경찰", "감사원",
-        "횡령", "배임", "뇌물", "부패", "비리", "부정", "조작", "담합",
-        "내부통제", "컴플라이언스", "윤리", "감사", "회계", "분식", "허위공시", "공시위반",
-        "정정공시", "내부자거래",
-        "리콜", "결함", "불량", "품질", "환불", "환수",
-        "인권", "차별", "괴롭힘", "직장내", "성희롱", "갑질", "하도급", "불공정",
-        "민원", "피해", "피해자", "집단소송",
-        "accident", "fatal", "injury", "safety", "strike", "labor",
-        "pollution", "spill", "emission", "violation", "sanction", "penalty", "fine",
-        "lawsuit", "indict", "investigation", "prosecution", "raid",
-        "bribery", "corruption", "fraud", "misconduct", "recall", "defect",
-        "esg", "compliance", "governance", "audit", "whistleblower",
-        "carbon", "emission", "climate", "human rights",
+        "사고",
+        "산재",
+        "중대재해",
+        "안전",
+        "위험",
+        "불법",
+        "위반",
+        "제재",
+        "벌금",
+        "기소",
+        "압수수색",
+        "수사",
+        "환경",
+        "오염",
+        "배출",
+        "유출",
+        "리콜",
+        "결함",
+        "fraud",
+        "corruption",
+        "violation",
+        "sanction",
+        "lawsuit",
+        "indict",
+        "investigation",
+        "recall",
+        "defect",
+        "accident",
     ]
 
 
-# 20260202 이종헌 수정: RSS 문서에 완화 필터/중복 제거 적용
-def _esg_filter_docs_relaxed(docs: List[DocItem]) -> List[DocItem]:
+def _esg_filter_docs_relaxed(docs: List[DocItem], *, time_window_days: int) -> List[DocItem]:
     if not docs:
         return []
     keys_l = [k.lower() for k in _esg_keywords()]
     kept: List[DocItem] = []
     for d in docs:
+        if not _within_time_window(d.published_at, time_window_days):
+            continue
         hay = " ".join([d.title or "", d.snippet or "", d.source or "", d.url or ""]).lower()
         if any(k in hay for k in keys_l):
             kept.append(d)
     return kept
 
 
-# 20260211 이종헌 수정: 검색 RSS + 고정 RSS 소스 병합 및 최대 feed 수 상향
 def esg_search_rss(req: SearchPreviewRequest) -> List[DocItem]:
-    """
-    RSS 검색(완화 모드):
-    - 회사명/별칭 검색 RSS만 사용
-    - ESG 키워드 포함 기사만 통과
-    """
-
-    def esg_build_rss_search_feeds(req: SearchPreviewRequest) -> list[str]:
-        base_q = (req.vendor or "").strip()
+    def build_rss_feeds(req_: SearchPreviewRequest) -> list[str]:
+        base_q = (req_.vendor or "").strip()
         if not base_q:
             return []
         terms = esg_expand_company_terms(base_q) or [base_q]
-        terms = terms[:2]
+        terms = terms[:3]
+        window = max(30, req_.search.time_window_days)
         search_feeds = [
-            f"https://news.google.com/rss/search?q={quote_plus(t)}&hl=ko&gl=KR&ceid=KR:ko"
-            for t in terms
+            f"https://news.google.com/rss/search?q={quote_plus(f'{term} when:{window}d')}&hl=ko&gl=KR&ceid=KR:ko"
+            for term in terms
         ]
         merged: list[str] = []
         seen: set[str] = set()
@@ -113,16 +129,15 @@ def esg_search_rss(req: SearchPreviewRequest) -> List[DocItem]:
         return merged
 
     logger.info("RSS search start vendor=%s", req.vendor)
-    feeds = esg_build_rss_search_feeds(req)
+    feeds = build_rss_feeds(req)
     if not feeds:
         return []
 
     items: List[DocItem] = []
-    seen_url = set()
-    max_total = 20
-    max_feeds = min(4, len(feeds))
-
-    timeout = httpx.Timeout(connect=1.0, read=1.2, write=1.0, pool=1.0)
+    seen_url: set[str] = set()
+    max_total = min(100, max(20, req.search.max_results * 2))
+    max_feeds = min(8, len(feeds))
+    timeout = httpx.Timeout(connect=1.2, read=1.5, write=1.0, pool=1.0)
 
     with httpx.Client(timeout=timeout, follow_redirects=True, headers={"User-Agent": "out_risk_api/0.1"}) as client:
         for feed_url in feeds[:max_feeds]:
@@ -148,7 +163,7 @@ def esg_search_rss(req: SearchPreviewRequest) -> List[DocItem]:
                             doc_id=esg_hash_id(link),
                             title=(it.findtext("title") or "").strip() or "untitled",
                             source=urlparse(link).netloc.replace("www.", "") or "unknown",
-                            published_at=esg_safe_ymd(it.findtext("pubDate")),
+                            published_at=_safe_iso_date(it.findtext("pubDate")),
                             url=link,
                             snippet=(it.findtext("title") or "").strip(),
                         )
@@ -157,8 +172,7 @@ def esg_search_rss(req: SearchPreviewRequest) -> List[DocItem]:
                 logger.warning("RSS fetch/parse failed: %s", str(e))
                 continue
 
-    # de-dup by url/title then filter
-    seen = set()
+    seen: set[tuple[str, str]] = set()
     uniq: List[DocItem] = []
     for d in items:
         key = ((d.title or "").strip().lower(), (d.url or "").strip().lower())
@@ -167,6 +181,6 @@ def esg_search_rss(req: SearchPreviewRequest) -> List[DocItem]:
         seen.add(key)
         uniq.append(d)
 
-    filtered = _esg_filter_docs_relaxed(uniq)[:10]
+    filtered = _esg_filter_docs_relaxed(uniq, time_window_days=req.search.time_window_days)[: req.search.max_results]
     logger.info("RSS docs raw=%s filtered=%s", len(items), len(filtered))
     return filtered

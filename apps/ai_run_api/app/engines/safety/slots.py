@@ -1,13 +1,13 @@
-
-# =========================
-# 3) 슬롯 정의 & 파일명→슬롯 매칭
-#    - 이번에 올린 실제 파일명 기준 패턴을 강화
-# =========================
+"""Safety domain slot definitions and filename-based matching."""
 
 from __future__ import annotations
 
 import re
 from typing import NamedTuple
+
+
+def _rx(expr: str) -> re.Pattern[str]:
+    return re.compile(expr, re.IGNORECASE)
 
 
 class SlotDef(NamedTuple):
@@ -18,84 +18,81 @@ class SlotDef(NamedTuple):
 
 
 SLOTS: list[SlotDef] = [
-
-
-    # 교육 이수 현황 (xlsx)
     SlotDef(
         name="safety.education.status",
-        display_name="안전교육 이수 현황",
+        display_name="\uc548\uc804\uad50\uc721 \uc774\uc218 \ud604\ud669",
         required=True,
         patterns=[
-            re.compile(r"(?i)edu.*status|교육.*현황|교육.*이수|안전교육.*현황|안전교육이수현황"),
+            _rx(r"\uc548\uc804\uad50\uc721.*(\ud604\ud669|\uc774\uc218)"),
+            _rx(r"\uad50\uc721.*(\ud604\ud669|\uc774\uc218)"),
+            _rx(r"edu.*status"),
         ],
     ),
-
-    # 소방 점검표 (pdf/xlsx)
     SlotDef(
         name="safety.fire.inspection",
-        display_name="소방시설 점검표",
+        display_name="\uc18c\ubc29 \uc810\uac80 \uacb0\uacfc",
         required=True,
         patterns=[
-            re.compile(r"(?i)fire.*insp|소방.*점검|소방시설.*점검|소방시설자체점검|자체점검.*결과표"),
+            _rx(r"\uc18c\ubc29.*(\uc810\uac80|\uc790\uccb4)"),
+            _rx(r"fire.*(inspection|check|insp)"),
         ],
     ),
-
-    # 위험성평가서 (xlsx/pdf)
     SlotDef(
         name="safety.risk.assessment",
-        display_name="위험성 평가서",
+        display_name="\uc704\ud5d8\uc131 \ud3c9\uac00",
         required=True,
         patterns=[
-            re.compile(r"(?i)risk.?assess|위험성.?평가|위험성평가서"),
+            _rx(r"\uc704\ud5d8\uc131?\s*\ud3c9\uac00"),
+            _rx(r"risk.?assess"),
         ],
     ),
-
-    # 안전보건관리체계(매뉴얼) — S1 구성요건 검사용 (pdf)
     SlotDef(
         name="safety.management.system",
-        display_name="안전보건관리체계 매뉴얼",
+        display_name="\uc548\uc804\ubcf4\uac74 \uad00\ub9ac\uccb4\uacc4",
         required=True,
         patterns=[
-            re.compile(r"(?i)management.*system|안전보건관리체계|관리체계.*매뉴얼|체계구축매뉴얼"),
+            _rx(r"\uc548\uc804\ubcf4\uac74\uad00\ub9ac\uccb4\uacc4"),
+            _rx(r"\uad00\ub9ac\uccb4\uacc4.*\ub9e4\ub274\uc5bc"),
+            _rx(r"management.*system"),
         ],
     ),
-
-    # 현장 사진(선택) — 이미지 묶음/단일
     SlotDef(
         name="safety.site.photos",
-        display_name="현장 사진",
+        display_name="\ud604\uc7a5 \uc0ac\uc9c4",
         required=False,
         patterns=[
-            re.compile(r"(?i)site.?photo|현장.?사진|현장사진"),
+            _rx(r"\ud604\uc7a5.*\uc0ac\uc9c4"),
+            _rx(r"site.?photo"),
         ],
     ),
-
-    # 교육 출석부 (스캔 PDF) — 날짜, 교육명, 이름, 서명
     SlotDef(
         name="safety.education.attendance",
-        display_name="교육 출석부",
+        display_name="\uad50\uc721 \ucd9c\uc11d\ubd80",
         required=False,
         patterns=[
-            re.compile(r"(?i)attend|출석부|출석명단|교육.*출석|출석.*명부"),
+            _rx(r"\ucd9c\uc11d\ubd80|\ucd9c\uc11d\uba85\ub2e8"),
+            _rx(r"\uad50\uc721.*\ucd9c\uc11d"),
+            _rx(r"attend"),
         ],
     ),
-
-    # 교육일 사진 (이미지) — 교육 현장 촬영본
     SlotDef(
         name="safety.education.photo",
-        display_name="교육일 사진",
+        display_name="\uad50\uc721\uc77c \uc0ac\uc9c4",
         required=False,
         patterns=[
-            re.compile(r"(?i)edu.*photo|교육.*사진|교육일.*사진|교육현장"),
+            _rx(r"\uad50\uc721.*\uc0ac\uc9c4"),
+            _rx(r"\uad50\uc721\uc77c\s*\uc0ac\uc9c4"),
+            _rx(r"edu.*photo"),
         ],
     ),
-        # (선택) TBM — 이번 테스트 업로드에는 없음
     SlotDef(
         name="safety.tbm",
-        display_name="TBM(작업 전 회의)",
+        display_name="TBM(\uc791\uc5c5 \uc804 \ud68c\uc758)",
         required=False,
         patterns=[
-            re.compile(r"(?i)\btbm\b|tool.?box.?meet|작업전.?회의|TBM"),
+            _rx(r"\btbm\b"),
+            _rx(r"tool.?box.?meet"),
+            _rx(r"\uc791\uc5c5\uc804.*\ud68c\uc758"),
         ],
     ),
 ]
@@ -110,14 +107,11 @@ def get_all_slot_names() -> list[str]:
 
 
 def match_filename_to_slot(filename: str) -> tuple[str, float] | None:
-    """
-    파일명 기반 1차 매칭.
-    - confidence는 규칙 기반 초기값(추후: 파일 내용/메타 검증으로 보정)
-    """
+    clean_name = filename.replace("_", " ").replace("-", " ")
+    clean_name = re.sub(r"\s+", " ", clean_name).strip().lower()
     for slot in SLOTS:
         for pat in slot.patterns:
-            if pat.search(filename):
-                # required 슬롯은 약간 더 신뢰도 부여
-                base = 0.88 if slot.required else 0.85
-                return slot.name, base
+            if pat.search(clean_name):
+                confidence = 0.9 if slot.required else 0.85
+                return slot.name, confidence
     return None

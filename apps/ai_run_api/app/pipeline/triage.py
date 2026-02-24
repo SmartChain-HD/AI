@@ -14,14 +14,17 @@ from app.schemas.run import FileRef
 SUPPORTED_EXTENSIONS = {
     "pdf": [".pdf"],
     "xlsx": [".xls", ".xlsx", ".csv"],
-    "image": [".jpg", ".jpeg", ".png"],
+    "image": [".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"],
 }
 
 ALL_SUPPORTED = {ext for exts in SUPPORTED_EXTENSIONS.values() for ext in exts}
 
 
-def get_ext(uri: str) -> str:
-    return PurePosixPath(uri.split("?")[0]).suffix.lower()
+def get_ext(file: FileRef) -> str:
+    uri_ext = PurePosixPath((file.storage_uri or "").split("?")[0]).suffix.lower()
+    if uri_ext:
+        return uri_ext
+    return PurePosixPath(file.file_name or "").suffix.lower()
 
 
 def get_file_type(ext: str) -> str | None:
@@ -39,7 +42,7 @@ def triage_files(files: list[FileRef]) -> list[dict]:
     """
     results: list[dict] = []
     for f in files:
-        ext = get_ext(f.storage_uri)
+        ext = get_ext(f)
         ftype = get_file_type(ext)
         if ftype:
             results.append({"file": f, "ext": ext, "file_type": ftype})

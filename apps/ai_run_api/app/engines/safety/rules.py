@@ -30,6 +30,7 @@ EXPECTED_HEADERS: dict[str, list[str]] = {
 # 2) 파이프라인에서 실제 생성되는 사유 코드
 # =========================
 REASON_CODES: dict[str, str] = {
+    "INFO_ANALYSIS_OK": "AI analysis completed (pass)",
     # ── 공통 (extractors/pipeline) ──
     "MISSING_SLOT":       "필수 슬롯 누락",
     "HEADER_MISMATCH":    "필수 헤더 누락",
@@ -37,6 +38,7 @@ REASON_CODES: dict[str, str] = {
     "DATE_MISMATCH":      "점검/교육/작성일이 제출 기간 밖",
     "SIGNATURE_MISSING":  "확인 서명란 미기재",
     "OCR_FAILED":         "OCR 판독 불가",
+    "G_OCR_UNREADABLE":   "문서 판독 불가(스캔/사진 품질 문제)",
     "LLM_ANOMALY_DETECTED": "AI가 문서 이상 징후를 감지함",
     "LLM_MISSING_FIELDS":   "AI가 누락 항목을 감지함",
     "VIOLATION_DETECTED":   "AI가 안전 위반 사항을 감지함",

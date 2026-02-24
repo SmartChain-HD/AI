@@ -59,6 +59,7 @@ class SubmitRequest(BaseModel):
     period_end: date
     files: list[FileRef]
     slot_hint: list[SlotHint]
+    force_ocr: bool = False
 
 
 class SlotResult(BaseModel):

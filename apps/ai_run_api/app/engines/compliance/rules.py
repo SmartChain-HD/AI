@@ -19,11 +19,13 @@ EXPECTED_HEADERS: dict[str, list[str]] = {
 # 2) 파이프라인에서 실제 생성되는 사유 코드
 # =========================================================
 REASON_CODES: dict[str, str] = {
+    "INFO_ANALYSIS_OK": "AI analysis completed (pass)",
     # ── 공통 ──
     "MISSING_SLOT":   "필수 슬롯 누락",
     "HEADER_MISMATCH": "필수 헤더(컬럼) 누락",
     "EMPTY_TABLE":    "표/데이터 행이 비어있음",
     "OCR_FAILED":     "OCR 판독 불가/텍스트 추출 실패",
+    "G_OCR_UNREADABLE": "문서 판독 불가(스캔/사진 품질 문제)",
     "WRONG_YEAR":     "문서 대상 연도 불일치 (2025년 아님)",
 
     # ── 표준 근로/하도급 계약서 ──

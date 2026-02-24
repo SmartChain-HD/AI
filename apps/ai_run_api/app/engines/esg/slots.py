@@ -22,6 +22,11 @@ import unicodedata
 ENABLE_OPTIONAL_DEMO_SLOTS = False  # False=필수만, True=필수+옵션
 
 _SLOTS_ALL: list["SlotDef"] | None = None  # 원본 백업
+_ALWAYS_ENABLED_OPTIONAL_SLOTS = {
+    "esg.energy.electricity.bill",
+    "esg.energy.gas.bill",
+    "esg.energy.water.bill",
+}
 
 
 def _refresh_slots() -> None:
@@ -29,7 +34,11 @@ def _refresh_slots() -> None:
     if _SLOTS_ALL is None:
         _SLOTS_ALL = list(SLOTS)  # 최초 1회 백업
 
-    SLOTS = list(_SLOTS_ALL) if ENABLE_OPTIONAL_DEMO_SLOTS else [s for s in _SLOTS_ALL if s.required]
+    if ENABLE_OPTIONAL_DEMO_SLOTS:
+        SLOTS = list(_SLOTS_ALL)
+    else:
+        # 필수 슬롯은 유지하고, 에너지 교차검증에 필요한 고지서 슬롯은 항상 포함한다.
+        SLOTS = [s for s in _SLOTS_ALL if s.required or s.name in _ALWAYS_ENABLED_OPTIONAL_SLOTS]
         
         
 # -----------------------------

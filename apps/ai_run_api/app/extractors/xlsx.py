@@ -37,7 +37,9 @@ async def extract_xlsx(
     """XLSX/CSV에서 헤더/날짜 검증.
 
     Returns dict with keys:
-        df_preview, dates, date_in_range, reasons
+        df_preview: LLM 입력용 상위 20행 CSV
+        df_full: 검증/교차검증용 전체 CSV
+        dates, date_in_range, reasons
     """
     df = _read_df(data, ext)
     reasons: list[str] = []
@@ -67,6 +69,7 @@ async def extract_xlsx(
 
     return {
         "df_preview": df.head(20).to_csv(index=False),
+        "df_full": df.to_csv(index=False),
         "dates": dates,
         "date_in_range": date_in_range,
         "reasons": reasons,

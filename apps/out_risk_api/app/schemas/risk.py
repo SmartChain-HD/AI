@@ -1,20 +1,17 @@
-# AI/apps/out_risk_api/app/schemas/risk.py
-
 from __future__ import annotations
 
-from enum import Enum  # 신규: RiskLevel을 Enum으로 통일해 런타임/검증 혼선을 제거
-from pydantic import BaseModel, Field
+from enum import Enum
 from typing import List, Optional
 
+from pydantic import BaseModel, Field
 
-# 20260211 이종헌 수정: Literal 대신 Enum(str)로 정의해 RiskLevel.LOW 사용/문자열 반환 모두 안전하게 처리
+
 class RiskLevel(str, Enum):
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
 
 
-# 20260211 이종헌 수정: classifier/summarizer 연동용 category enum 추가
 class Category(str, Enum):
     SAFETY_ACCIDENT = "SAFETY_ACCIDENT"
     LEGAL_SANCTION = "LEGAL_SANCTION"
@@ -22,7 +19,12 @@ class Category(str, Enum):
 
 
 class RagConfig(BaseModel):
-    enabled: bool = False  # 수정: 기본 OFF(타임아웃 안정화 목적)
+    enabled: bool = False
+
+
+class SearchConfig(BaseModel):
+    time_window_days: int = Field(default=365, ge=30, le=3650)
+    max_results: int = Field(default=30, ge=5, le=100)
 
 
 class DocItem(BaseModel):
@@ -34,7 +36,6 @@ class DocItem(BaseModel):
     snippet: Optional[str] = None
 
 
-# 20260211 이종헌 수정: 분류 신호 구조체 추가(classifier 출력 스키마)
 class Signal(BaseModel):
     category: Category
     severity: int = Field(ge=0)
@@ -58,6 +59,7 @@ class ExternalRiskDetectVendorResult(BaseModel):
 class ExternalRiskDetectBatchRequest(BaseModel):
     vendors: List[str]
     rag: RagConfig = Field(default_factory=RagConfig)
+    search: SearchConfig = Field(default_factory=SearchConfig)
 
 
 class ExternalRiskDetectBatchResponse(BaseModel):
@@ -68,6 +70,7 @@ class SearchPreviewRequest(BaseModel):
     vendor: str
     gdelt_url: Optional[str] = None
     rag: RagConfig = Field(default_factory=RagConfig)
+    search: SearchConfig = Field(default_factory=SearchConfig)
 
 
 class SearchPreviewResponse(BaseModel):

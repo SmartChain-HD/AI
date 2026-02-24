@@ -224,12 +224,30 @@ with tab_submit:
             # clarifications
             clarifications = data.get("clarifications", [])
             if clarifications:
-                st.markdown("**Clarifications**")
+                st.markdown("**판정 안내문**")
+                verdict_map = {sr.get("slot_name"): sr.get("verdict") for sr in slot_results}
+                grouped = {"NEED_FIX": [], "NEED_CLARIFY": [], "PASS": []}
                 for cl in clarifications:
-                    with st.expander(f"{cl['slot_name']}"):
-                        st.write(cl["message"])
-                        if cl.get("file_ids"):
-                            st.caption(f"Files: {', '.join(cl['file_ids'])}")
+                    v = verdict_map.get(cl.get("slot_name", ""), "NEED_CLARIFY")
+                    if v not in grouped:
+                        v = "NEED_CLARIFY"
+                    grouped[v].append(cl)
+
+                for verdict_label, title in [
+                    ("NEED_FIX", "수정 필요 (NEED_FIX)"),
+                    ("NEED_CLARIFY", "확인/소명 필요 (NEED_CLARIFY)"),
+                    ("PASS", "정상 판정 근거 (PASS)"),
+                ]:
+                    items = grouped[verdict_label]
+                    if not items:
+                        continue
+                    st.markdown(f"**{title}**")
+                    for cl in items:
+                        slot_name = cl.get("slot_name", "")
+                        with st.expander(f"{slot_name}"):
+                            st.write(cl.get("message", ""))
+                            if cl.get("file_ids"):
+                                st.caption(f"Files: {', '.join(cl['file_ids'])}")
 
             # extras
             extras = data.get("extras", {})

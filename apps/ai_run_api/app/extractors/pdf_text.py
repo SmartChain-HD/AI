@@ -1,6 +1,6 @@
-"""PDF 텍스트 추출 + 조건부 OCR (기획서 §2.3, §4.2).
+﻿"""PDF ?띿뒪??異붿텧 + 議곌굔遺 OCR (湲고쉷??짠2.3, 짠4.2).
 
-OCR 조건: 페이지별 텍스트 30자 이하 비율이 20% 이상이면 OCR 수행.
+OCR 議곌굔: ?섏씠吏蹂??띿뒪??30???댄븯 鍮꾩쑉??20% ?댁긽?대㈃ OCR ?섑뻾.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import fitz  # PyMuPDF
 
 from app.extractors.ocr.clova_client import run_ocr
 
-DATE_RE = re.compile(r"(\d{4})[.\-/년](\d{1,2})[.\-/월](\d{1,2})")
+DATE_RE = re.compile(r"(\d{4})\s*[.\-/\s]\s*(\d{1,2})\s*[.\-/\s]\s*(\d{1,2})")
 
 OCR_CHAR_THRESHOLD = 30
 OCR_PAGE_RATIO_THRESHOLD = 0.20
@@ -23,7 +23,7 @@ def _extract_dates(text: str) -> list[str]:
 
 
 def _needs_ocr(page_texts: list[str]) -> bool:
-    """페이지별 텍스트 30자 이하 비율이 20% 이상이면 True."""
+    """?섏씠吏蹂??띿뒪??30???댄븯 鍮꾩쑉??20% ?댁긽?대㈃ True."""
     if not page_texts:
         return False
     short_pages = sum(1 for t in page_texts if len(t.strip()) <= OCR_CHAR_THRESHOLD)
@@ -44,8 +44,9 @@ async def extract_pdf(
     data: bytes,
     period_start: date,
     period_end: date,
+    force_ocr: bool = False,
 ) -> dict:
-    """PDF에서 텍스트/날짜/서명 추출. 필요 시 OCR 수행.
+    """PDF?먯꽌 ?띿뒪???좎쭨/?쒕챸 異붿텧. ?꾩슂 ??OCR ?섑뻾.
 
     Returns dict with keys:
         text, dates, date_in_range, signature_detected, ocr_applied, reasons
@@ -64,20 +65,23 @@ async def extract_pdf(
     reasons: list[str] = []
     ocr_applied = False
 
-    # 조건부 OCR
-    if _needs_ocr(page_texts):
+    # 議곌굔遺 OCR
+    if force_ocr or _needs_ocr(page_texts):
         try:
             ocr_text = await run_ocr(data, "pdf")
             full_text = ocr_text if len(ocr_text) > len(full_text) else full_text
             ocr_applied = True
         except Exception:
-            # OCR 호출이 실패해도 기본 텍스트가 충분하면 판독 실패로 보지 않는다.
+            # OCR ?몄텧???ㅽ뙣?대룄 湲곕낯 ?띿뒪?멸? 異⑸텇?섎㈃ ?먮룆 ?ㅽ뙣濡?蹂댁? ?딅뒗??
             if len(full_text.strip()) < 80:
                 reasons.append("OCR_FAILED")
 
+    if len(full_text.strip()) < OCR_CHAR_THRESHOLD and "OCR_FAILED" not in reasons:
+        reasons.append("G_OCR_UNREADABLE")
+
     dates = _extract_dates(full_text)
 
-    # 날짜 범위 검증
+    # ?좎쭨 踰붿쐞 寃利?
     date_in_range = True
     for d in dates:
         try:

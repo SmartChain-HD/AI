@@ -1,11 +1,9 @@
-# AI/apps/out_risk_api/app/search/provider.py
-
-# 20260202 이종헌 수정: GDELT 우선 + RSS fallback 검색 파이프라인 주석 보강
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -19,7 +17,6 @@ logger = logging.getLogger("out_risk")
 GDELT_DOC_API = "https://api.gdeltproject.org/api/v2/doc/doc"
 
 
-# 20260201 이종헌 수정: 회사명/별칭 기반 GDELT 쿼리 문자열 생성
 def _build_gdelt_query(terms: List[str]) -> str:
     quoted = [f"\"{t}\"" for t in terms if t]
     if not quoted:
@@ -29,73 +26,104 @@ def _build_gdelt_query(terms: List[str]) -> str:
     return "(" + " OR ".join(quoted) + ")"
 
 
-# 20260201 이종헌 수정: GDELT Doc API URL 생성(maxrecords 포함)
-def _build_gdelt_url(query: str, max_records: int = 20) -> str:
+def _build_gdelt_url(query: str, *, max_records: int, time_window_days: int) -> str:
+    start_dt = datetime.now(timezone.utc) - timedelta(days=max(1, time_window_days))
     params = {
         "query": query,
         "mode": "ArtList",
         "format": "json",
         "maxrecords": str(max_records),
         "sort": "DateDesc",
+        "startdatetime": start_dt.strftime("%Y%m%d%H%M%S"),
     }
     return str(httpx.URL(GDELT_DOC_API, params=params))
 
 
-# 20260202 이종헌 수정: ESG 관련 키워드 필터(노이즈 제거)
 def _esg_keywords() -> List[str]:
     return [
-        # Safety / Labor
-        "사고", "산재", "산업재해", "중대재해", "중대재해처벌법", "사망", "부상",
-        "작업중", "안전", "안전사고", "안전관리", "위험물", "폭발", "화재", "붕괴",
-        "노동", "노조", "파업", "분쟁", "해고", "임금체불", "근로감독",
-        "산업안전보건법", "안전보건", "노동안전",
-        # Environment / Climate
-        "환경", "환경규제", "환경오염", "오염", "대기오염", "수질오염", "토양오염",
-        "폐수", "배출", "배출가스", "유출", "누출", "유해물질", "화학물질",
-        "탄소", "온실가스", "탄소배출", "배출권", "기후", "ESG",
-        # Legal / Compliance
-        "불법", "위반", "수사", "조사", "압수수색", "기소", "고소", "고발", "혐의",
-        "법원", "재판", "판결", "벌금", "과징금", "제재", "처분", "영업정지", "허가취소",
-        "공정위", "공정거래위원회", "금감원", "금융감독원", "검찰", "경찰", "감사원",
-        # Governance / Integrity
-        "횡령", "배임", "뇌물", "부패", "비리", "부정", "조작", "담합",
-        "내부통제", "컴플라이언스", "윤리", "감사", "회계", "분식", "허위공시", "공시위반",
-        "정정공시", "내부자거래",
-        # Product / Recall
-        "리콜", "결함", "불량", "품질", "환불", "환수",
-        # Human rights / Fair trade
-        "인권", "차별", "괴롭힘", "직장내", "성희롱", "갑질", "하도급", "불공정",
-        "민원", "피해", "피해자", "집단소송",
-        # English
-        "accident", "fatal", "injury", "safety", "strike", "labor",
-        "pollution", "spill", "emission", "violation", "sanction", "penalty", "fine",
-        "lawsuit", "indict", "investigation", "prosecution", "raid",
-        "bribery", "corruption", "fraud", "misconduct", "recall", "defect",
-        "esg", "compliance", "governance", "audit", "whistleblower",
-        "carbon", "emission", "climate", "human rights",
+        "사고",
+        "산재",
+        "중대재해",
+        "안전",
+        "위험",
+        "불법",
+        "위반",
+        "제재",
+        "벌금",
+        "기소",
+        "압수수색",
+        "수사",
+        "환경",
+        "오염",
+        "배출",
+        "유출",
+        "리콜",
+        "결함",
+        "fraud",
+        "corruption",
+        "violation",
+        "sanction",
+        "lawsuit",
+        "indict",
+        "investigation",
+        "recall",
+        "defect",
+        "accident",
     ]
 
 
-# 20260202 이종헌 수정: 회사명/키워드 완화 필터로 문서 후보 정제
-def _esg_filter_docs_relaxed(docs: List[DocItem], terms: List[str]) -> List[DocItem]:
+def _parse_doc_datetime(value: Optional[str]) -> Optional[datetime]:
+    s = (value or "").strip()
+    if not s:
+        return None
+    try:
+        if "T" in s and s.endswith("Z") and len(s) == 16:
+            return datetime.strptime(s, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except Exception:
+        try:
+            return datetime.strptime(s, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except Exception:
+            return None
+
+
+def _within_time_window(published_at: Optional[str], time_window_days: int) -> bool:
+    dt = _parse_doc_datetime(published_at)
+    if not dt:
+        return True
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    age = datetime.now(timezone.utc) - dt
+    return age <= timedelta(days=max(1, time_window_days))
+
+
+def _esg_filter_docs_relaxed(
+    docs: List[DocItem],
+    terms: List[str],
+    *,
+    time_window_days: int,
+) -> List[DocItem]:
     if not docs:
         return []
     terms_l = [t.lower() for t in terms if t]
     keys_l = [k.lower() for k in _esg_keywords()]
+
     kept: List[DocItem] = []
     for d in docs:
+        if not _within_time_window(d.published_at, time_window_days):
+            continue
         hay = " ".join([d.title or "", d.snippet or "", d.source or "", d.url or ""]).lower()
         has_company = any(t in hay for t in terms_l) if terms_l else True
         has_keyword = any(k in hay for k in keys_l)
-        # 완화: GDELT는 회사명 쿼리로 가져오므로 키워드만 충족해도 통과
         if has_keyword and (has_company or not terms_l):
             kept.append(d)
     return kept
 
 
-# 20260203 이종헌 수정: non-json/JSON decode 실패를 분기해 search 멈춤 대신 빈 결과로 복구
 async def esg_search_gdelt(req: SearchPreviewRequest) -> List[DocItem]:
-    esg_timeout = httpx.Timeout(3.0, connect=2.0)
+    timeout = httpx.Timeout(3.5, connect=2.0)
+    time_window_days = req.search.time_window_days
+    max_records = req.search.max_results
 
     try:
         logger.info("GDELT search start vendor=%s", req.vendor)
@@ -103,9 +131,13 @@ async def esg_search_gdelt(req: SearchPreviewRequest) -> List[DocItem]:
         terms = esg_expand_company_terms(req.vendor) or [req.vendor]
         if not gdelt_url:
             query = _build_gdelt_query(terms[:3])
-            gdelt_url = _build_gdelt_url(query)
+            gdelt_url = _build_gdelt_url(
+                query,
+                max_records=max_records,
+                time_window_days=time_window_days,
+            )
 
-        async with httpx.AsyncClient(timeout=esg_timeout) as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             r = await client.get(gdelt_url)
 
         ctype = (r.headers.get("content-type") or "").lower()
@@ -120,11 +152,13 @@ async def esg_search_gdelt(req: SearchPreviewRequest) -> List[DocItem]:
             return []
 
         docs = _esg_parse_gdelt_to_docs(data)
-        filtered = _esg_filter_docs_relaxed(docs, terms)
+        filtered = _esg_filter_docs_relaxed(
+            docs,
+            terms,
+            time_window_days=time_window_days,
+        )
         logger.info("GDELT docs raw=%s filtered=%s", len(docs), len(filtered))
-        if not filtered and docs:
-            logger.warning("GDELT returned docs but none matched ESG keywords: %s", terms)
-        return filtered
+        return filtered[:max_records]
     except httpx.TimeoutException:
         logger.warning("GDELT timeout")
         return []
@@ -133,7 +167,6 @@ async def esg_search_gdelt(req: SearchPreviewRequest) -> List[DocItem]:
         return []
 
 
-# 20260202 이종헌 수정: GDELT 응답을 DocItem 공통 포맷으로 파싱 + dedup
 def _esg_parse_gdelt_to_docs(data: Dict[str, Any]) -> List[DocItem]:
     items = data.get("articles") or data.get("data") or data.get("results") or []
     docs: List[DocItem] = []
@@ -143,6 +176,7 @@ def _esg_parse_gdelt_to_docs(data: Dict[str, Any]) -> List[DocItem]:
         url = (it.get("url") or it.get("sourceUrl") or it.get("link") or "").strip()
         source = (it.get("sourceCountry") or it.get("source") or it.get("domain") or "GDELT").strip()
         published_at = (it.get("seendate") or it.get("publishedAt") or it.get("date") or None)
+        snippet = (it.get("summary") or it.get("snippet") or None)
 
         if not title or not url:
             continue
@@ -154,12 +188,11 @@ def _esg_parse_gdelt_to_docs(data: Dict[str, Any]) -> List[DocItem]:
                 url=url,
                 source=source,
                 published_at=str(published_at) if published_at else None,
-                snippet=(it.get("summary") or it.get("snippet") or None),
+                snippet=snippet,
             )
         )
 
-    # de-dup by url/title
-    seen = set()
+    seen: set[tuple[str, str]] = set()
     uniq: List[DocItem] = []
     for d in docs:
         key = ((d.title or "").strip().lower(), (d.url or "").strip().lower())
@@ -170,11 +203,10 @@ def _esg_parse_gdelt_to_docs(data: Dict[str, Any]) -> List[DocItem]:
     return uniq
 
 
-# 20260211 이종헌 수정: GDELT/RSS 동시 수행 후 GDELT 우선 선택으로 지연 누적 완화
 async def esg_search_documents(req: SearchPreviewRequest) -> List[DocItem]:
     async def _gdelt_safe() -> List[DocItem]:
         try:
-            return await asyncio.wait_for(esg_search_gdelt(req), timeout=3.5)
+            return await asyncio.wait_for(esg_search_gdelt(req), timeout=4.0)
         except asyncio.TimeoutError:
             logger.warning("GDELT stage timeout vendor=%s", req.vendor)
             return []
@@ -184,7 +216,7 @@ async def esg_search_documents(req: SearchPreviewRequest) -> List[DocItem]:
 
     async def _rss_safe() -> List[DocItem]:
         try:
-            return await asyncio.wait_for(asyncio.to_thread(esg_search_rss, req), timeout=3.5)
+            return await asyncio.wait_for(asyncio.to_thread(esg_search_rss, req), timeout=4.0)
         except asyncio.TimeoutError:
             logger.warning("RSS stage timeout vendor=%s", req.vendor)
             return []
@@ -193,6 +225,16 @@ async def esg_search_documents(req: SearchPreviewRequest) -> List[DocItem]:
             return []
 
     gdelt_docs, rss_docs = await asyncio.gather(_gdelt_safe(), _rss_safe())
-    if gdelt_docs:
-        return gdelt_docs[:10]
-    return rss_docs[:10]
+    max_results = req.search.max_results
+
+    merged: List[DocItem] = []
+    seen: set[tuple[str, str]] = set()
+    for d in gdelt_docs + rss_docs:
+        key = ((d.title or "").strip().lower(), (d.url or "").strip().lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(d)
+        if len(merged) >= max_results:
+            break
+    return merged

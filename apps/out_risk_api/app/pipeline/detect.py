@@ -38,7 +38,7 @@ async def esg_search_preview(req: SearchPreviewRequest) -> SearchPreviewResponse
 
 # 20260211 이종헌 수정: 벤더 배치 타임아웃/병렬도 조정 및 단건 예외 격리
 async def esg_detect_external_risk_batch(req: ExternalRiskDetectBatchRequest) -> ExternalRiskDetectBatchResponse:
-    esg_per_vendor_timeout_sec = 12.0
+    esg_per_vendor_timeout_sec = 16.0
     max_parallel = min(4, max(2, len(req.vendors)))
     sem = asyncio.Semaphore(max_parallel)
 
@@ -155,7 +155,7 @@ async def esg_detect_external_risk_one(vendor: str, req: ExternalRiskDetectBatch
 
 # 20260201 이종헌 신규: 벤더 단위 SearchPreviewRequest 빌더
 def _esg_build_search_req(vendor: str, req: ExternalRiskDetectBatchRequest) -> SearchPreviewRequest:
-    return SearchPreviewRequest(vendor=vendor, rag=req.rag)
+    return SearchPreviewRequest(vendor=vendor, rag=req.rag, search=req.search)
 
 
 # 20260211 이종헌 수정: 3줄 사유에 분류 정보(classifier) 포함
